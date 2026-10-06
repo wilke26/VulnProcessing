@@ -9,6 +9,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.connectors.ncentral_client import NCentralClient
+from app.db.models import Asset, Tenant
+from app.db.models import Finding as OrmFinding
+from app.models.findings import Finding as PydanticFinding
 from app.services.windows_patch_filter import WindowsPatchFilter
 
 
@@ -106,3 +109,66 @@ class TestWindowsPatchFilterIntegration:
 
         # Assert: Alle 5 Findings müssen unverändert zurückkommen
         assert len(result) == 5
+
+    @pytest.mark.asyncio
+    async def test_partial_filter_persists_separate_target_for_orm_finding(self, db_session):
+        mock_client = AsyncMock(spec=NCentralClient)
+        mock_client.find_customer_by_name.return_value = {"customerId": 123}
+        mock_client.get_devices_for_customer.return_value = [
+            {"deviceId": 1, "deviceName": "server01"},
+            {"deviceId": 2, "deviceName": "server02"},
+        ]
+        mock_client.is_kb_installed.side_effect = [True, False]
+        tenant = Tenant(name="TestCustomer")
+        asset = Asset(tenant=tenant, name="server01")
+        finding = OrmFinding(
+            tenant=tenant,
+            asset=asset,
+            name="Test Schwachstelle",
+            target="server01, server02",
+            windows_version_hint="KB5001234",
+            risk=7.0,
+            amount=1,
+            extended_solution_json='["Patch installieren"]',
+        )
+        db_session.add_all([tenant, asset, finding])
+        db_session.commit()
+        finding_id = finding.id
+
+        result = await WindowsPatchFilter(mock_client).filter_findings_batch([finding])
+        db_session.commit()
+        db_session.expire_all()
+        persisted_finding = db_session.get(OrmFinding, finding_id)
+
+        assert result == [finding]
+        assert persisted_finding is not None
+        assert persisted_finding.target == "server01, server02"
+        assert persisted_finding.ticket_target == "server02"
+        mock_client.find_customer_by_name.assert_awaited_once_with("TestCustomer")
+
+    @pytest.mark.asyncio
+    async def test_partial_filter_copies_pydantic_finding_without_mutating_source(self):
+        mock_client = AsyncMock(spec=NCentralClient)
+        mock_client.find_customer_by_name.return_value = {"customerId": 123}
+        mock_client.get_devices_for_customer.return_value = [
+            {"deviceId": 1, "deviceName": "server01"},
+            {"deviceId": 2, "deviceName": "server02"},
+        ]
+        mock_client.is_kb_installed.side_effect = [True, False]
+        finding = PydanticFinding(
+            name="Test Schwachstelle",
+            tenant="TestCustomer",
+            target="server01, server02",
+            windowsVersionHint="KB5001234",
+            risk=7.0,
+            amount=1,
+            extendedSolution=["Patch installieren"],
+            products=["Windows"],
+        )
+
+        result = await WindowsPatchFilter(mock_client).filter_findings_batch([finding])
+
+        assert len(result) == 1
+        assert result[0] is not finding
+        assert result[0].target == "server02"
+        assert finding.target == "server01, server02"

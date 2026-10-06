@@ -14,6 +14,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import BaseModel
+
 from app.connectors.ncentral_client import NCentralClient
 from app.core.logging import get_logger
 
@@ -113,7 +115,8 @@ class WindowsPatchFilter:
         )
 
         # 2. Tenant in N-Central suchen
-        tenant_name = getattr(finding, "tenant", "")
+        tenant = getattr(finding, "tenant", "")
+        tenant_name = str(getattr(tenant, "name", tenant) or "")
         customer = await self.client.find_customer_by_name(tenant_name)
 
         if not customer:
@@ -223,6 +226,14 @@ class WindowsPatchFilter:
 
         return remaining_targets, filtered_targets
 
+    @staticmethod
+    def _set_persisted_ticket_target(finding: Any, target: str | None) -> bool:
+        """Set the ORM-only dispatch target without changing the source target."""
+        if not hasattr(type(finding), "ticket_target"):
+            return False
+        finding.ticket_target = target
+        return True
+
     async def filter_findings_batch(self, findings: list[Any]) -> list[Any]:
         """
         Filtert eine Liste von Findings parallel.
@@ -248,6 +259,7 @@ class WindowsPatchFilter:
                     f"'{getattr(finding, 'name', '')}': {result}"
                 )
                 # Bei Fehler: Finding unverändert übernehmen
+                self._set_persisted_ticket_target(finding, None)
                 filtered_findings.append(finding)
                 continue
 
@@ -260,19 +272,26 @@ class WindowsPatchFilter:
                     f"Finding '{getattr(finding, 'name', '')}' vollständig gefiltert "
                     f"(alle Geräte bereits gepatcht)"
                 )
+                self._set_persisted_ticket_target(finding, None)
                 # Finding komplett überspringen
                 continue
 
-            # Pydantic-Modelle erhalten eine Kopie mit bereinigter Target-Liste.
-            if hasattr(finding, "model_copy"):
-                # Pydantic-Modell: Neues Objekt erzeugen
-                updated_finding = finding.model_copy(
-                    update={"target": ", ".join(remaining_targets)}
-                )
+            filtered_target = ", ".join(remaining_targets)
+            if isinstance(finding, BaseModel):
+                # Validierte Eingaben bleiben unverändert; die Pipeline erhält eine Kopie.
+                updated_finding = finding.model_copy(update={"target": filtered_target})
                 filtered_findings.append(updated_finding)
             else:
-                # Nicht-Pydantic-Objekte unterstützen hier kein sicheres Umschreiben
-                # des Target-Felds und werden deshalb unverändert übernommen.
+                persisted_target = filtered_target if filtered_targets else None
+                if filtered_targets and not self._set_persisted_ticket_target(
+                    finding, persisted_target
+                ):
+                    logger.warning(
+                        "Gefilterte Target-Liste für Finding '%s' kann nicht persistiert werden",
+                        getattr(finding, "name", ""),
+                    )
+                elif not filtered_targets:
+                    self._set_persisted_ticket_target(finding, None)
                 filtered_findings.append(finding)
 
         logger.info(

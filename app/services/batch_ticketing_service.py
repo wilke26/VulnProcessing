@@ -209,7 +209,12 @@ class BatchTicketingService:
             "findings_count": len(filtered_findings),
             "filtered_count": len(findings) - len(filtered_findings),
             "findings": [
-                {"id": f.id, "name": f.name, "target": f.target, "risk": f.risk}
+                {
+                    "id": f.id,
+                    "name": f.name,
+                    "target": f.ticket_target or f.target,
+                    "risk": f.risk,
+                }
                 for f in filtered_findings
             ],
         }

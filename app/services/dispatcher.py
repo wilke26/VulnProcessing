@@ -231,7 +231,10 @@ class TicketDispatcher(TicketDispatcherProtocol):
         """
         name = getattr(finding, "name", getattr(finding, "product_name", "Unbekanntes Finding"))
         tenant = str(getattr(finding, "tenant", getattr(finding, "tenant_id", ""))).strip()
-        target = str(getattr(finding, "target", getattr(finding, "asset", ""))).strip()
+        target = str(
+            getattr(finding, "ticket_target", None)
+            or getattr(finding, "target", getattr(finding, "asset", ""))
+        ).strip()
 
         parts = [name]
         if tenant:

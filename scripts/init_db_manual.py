@@ -146,6 +146,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
             risk REAL NOT NULL,
             amount INTEGER NOT NULL,
             target TEXT NOT NULL,
+            ticket_target TEXT,
             windows_version_hint TEXT DEFAULT '',
             extended_solution_json TEXT NOT NULL,
             priority_score REAL,

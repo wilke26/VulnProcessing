@@ -148,6 +148,11 @@ Bearer-Credential auf dem Transportweg schützen.
   ergänzt. Alte `pending`-Batches ohne Token können nicht sicher migriert werden und müssen
   vor dem Deployment abgeschlossen oder zurückgesetzt werden. `--check-only` beendet sich
   mit Status 1, wenn eine Migration oder manuelle Bereinigung erforderlich ist.
+- Für bestehende Datenbanken ergänzt
+  `python -m scripts.migrate_ticket_targets --apply --database-url <SQLAlchemy-URL>`
+  das nullable Feld `ticket_target`. Vorab kann derselbe Befehl mit `--check-only`
+  ausgeführt werden. Das ursprüngliche Scan-Target bleibt unverändert; nur der nach
+  Patch-Filterung verbleibende Versandumfang wird separat gespeichert.
 - `MAX_REQUEST_BYTES` begrenzt jeden eingehenden HTTP-Body bereits während des
   Streamings (Standard: 11 MiB). `MAX_IMPORT_BYTES` und
   `MAX_FINDINGS_PER_IMPORT` begrenzen zusätzlich die eigentliche JSON-Datei auf
