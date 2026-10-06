@@ -82,9 +82,9 @@ class TicketPreparationService:
 
     Workflow:
     1. Windows-Patch-Filterung (falls aktiviert)
-    2. Priorisierung
+    2. NVD-Anreicherung
     3. Deduplizierung
-    4. Enrichment (Remediation Guides, CVE-Daten)
+    4. Priorisierung
     """
 
     def __init__(
@@ -101,7 +101,8 @@ class TicketPreparationService:
             findings: Liste von Finding-Objekten (SQLAlchemy-Modelle).
 
         Returns:
-            Gefilterte, angereicherte und priorisierte Finding-Liste (Pydantic-Modelle).
+            Gefilterte und priorisierte Liste der ursprünglichen ORM-Findings.
+            Angereicherte Prioritätswerte werden auf diese Objekte zurückgeschrieben.
         """
         if not findings:
             return []

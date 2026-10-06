@@ -66,20 +66,23 @@ async def create_tickets(
     principal: ManagementPrincipal = Depends(require_management_operation(TICKETS_CREATE)),
 ):
     """
-    Erstellt Tickets für offene Findings nach Anwendung von Filtern.
+    Ermittelt offene Findings für die historische, seiteneffektfreie Ticket-Vorschau.
 
     Workflow:
     1. Lädt offene Findings aus der Datenbank.
     2. Filtert nach optionalem Tenant und minimalem Risk-Score.
     3. Wendet TicketPreparationService an (z.B. Windows-Patch-Filterung über N-Central).
-    4. Simuliert die Erstellung von Tickets in einem externen System.
+    4. Liefert eine Vorschau der Findings, die für eine Ticketerstellung vorgesehen wären.
+
+    Dieser ältere Kompatibilitätsendpunkt hat bewusst keine externen Seiteneffekte.
+    Der tatsächliche Versand erfolgt über ``/tickets/dispatch`` oder die Batch-Endpunkte.
 
     Args:
         tenant_name (str, optional): Der Name des Mandanten.
         min_risk (float, optional): Der minimale Risikowert.
 
     Returns:
-        dict: Informationen über die Anzahl der erstellten und gefilterten Tickets.
+        dict: Informationen über die Anzahl der vorgemerkten und gefilterten Tickets.
 
     Raises:
         HTTPException: Bei Fehlern während des Prozesses.
@@ -131,12 +134,12 @@ async def create_tickets(
                 "code": None,
             }
 
-        # 3. Tickets erstellen (Aktuell ein Stub - Integration mit echtem Ticketsystem erforderlich)
-        # TODO: Integration mit Systemen wie MKS, DocBee oder Jira implementieren
+        # 3. Vorschau für den seiteneffektfreien Kompatibilitätsendpunkt erzeugen.
+        # Der echte Versand ist ausschließlich Aufgabe der Dispatch-Endpunkte.
         created_count = 0
 
         for finding in filtered_findings:
-            # Hier würde der eigentliche Aufruf des Ticket-Connectors erfolgen
+            # Die historische Antwortstruktur bezeichnet vorgemerkte Findings als "created".
             logger.info(f"Würde Ticket erstellen für Finding: {finding.name}")
             created_count += 1
 
@@ -190,9 +193,8 @@ async def dispatch_tickets(
             )
 
         if not findings:
-            # Wenn keine Findings vorhanden sind, im Nicht-Dry-Run-Fall dennoch den Dispatcher
-            # initialisieren/aufrufen, damit Fehler im Dispatching-Pfad als 500 propagiert werden
-            # (wichtig für Integrations-Tests, die Fehlerbehandlung prüfen).
+            # Den Dispatcher auch bei leerer Auswahl initialisieren, damit Fehler in seiner
+            # Konfiguration nicht durch das leere Ergebnis verdeckt werden.
             if not dry_run:
                 dispatcher = build_ticket_dispatcher()
                 await dispatcher.dispatch([])
@@ -338,7 +340,8 @@ async def send_batch(
     """
     try:
         _require_batch_tenant_access(batch_id, principal)
-        # Hinweis: Dieser Endpoint ist veraltet. Alias auf /tickets/batch/{id}/dispatch.
+        # Veralteter Kompatibilitätsendpunkt mit demselben Dispatch-Ablauf wie
+        # /tickets/batch/{id}/dispatch.
         service = build_batch_ticketing_service()
         dispatcher = build_ticket_dispatcher()
         result = await service.dispatch_batch(batch_id=batch_id, dispatcher=dispatcher)

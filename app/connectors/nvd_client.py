@@ -4,12 +4,7 @@ app/connectors/nvd_client.py
 Client für die NVD (National Vulnerability Database) API v2.0.
 Dokumentation: https://nvd.nist.gov/developers/vulnerabilities
 
-Zusammenführung aus:
-- Struktur/Ablage: connectors/-Konsolidierung (origin/main).
-- Verbesserungen (e467dd1): config-driven Retry/TTL/Rate-Limit, internes
-  NOT_FOUND-Caching, Tenacity AsyncRetrying (v9+), Safe-HTTPStatusError-Zugriff.
-
-Öffentlicher Vertrag (bewusst kompatibel zu den bestehenden Aufrufern):
+Öffentlicher Vertrag:
 - get_cve_data(cve_id) -> dict | None
     dict      = CVE-Payload bei Erfolg
     None      = CVE nicht gefunden ODER API-Fehler

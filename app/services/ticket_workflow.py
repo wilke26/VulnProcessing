@@ -1,8 +1,11 @@
 """
 app/services/ticket_workflow.py
 
-End-to-End Workflow-Orchestrierung für Ticketerstellung.
-Koordiniert alle Schritte von Batch-Erstellung bis Bestätigung.
+Historischer Workflow-Helfer für die sequenzielle Batch-Erstellung.
+
+Die aktiven HTTP-Pfade verwenden den Dispatcher direkt. Dieser Helfer erstellt
+Batches und wartet auf externes Senden beziehungsweise Bestätigen; sein
+``auto_send``-Zweig ist nur eine dokumentierte Simulation ohne externe Seiteneffekte.
 """
 
 from __future__ import annotations
@@ -17,13 +20,12 @@ logger = get_logger(__name__)
 
 class TicketWorkflowOrchestrator:
     """
-    Orchestriert den gesamten Ticketing-Workflow.
+    Orchestriert die Batch-Erstellung bis zur Grenze des externen Versands.
 
     Workflow:
     1. Erstelle Batch
-    2. Sende an Ticketsystem
-    3. Warte auf Bestätigung (extern)
-    4. Wiederhole für nächsten Batch
+    2. Halte für externen Versand und Bestätigung an
+    3. Wiederhole nach Bestätigung für den nächsten Batch
     """
 
     def __init__(self, batch_service: BatchTicketingService | None = None) -> None:
@@ -36,12 +38,13 @@ class TicketWorkflowOrchestrator:
         auto_send: bool = False,
     ) -> dict[str, Any]:
         """
-        Verarbeitet alle Findings eines Tenants in 5er-Batches.
+        Erstellt sequenziell Batches, bis ein externer Verarbeitungsschritt erforderlich ist.
 
         Args:
             tenant_name: Name des Mandanten
             min_risk: Minimaler Risk-Score
-            auto_send: Automatisch an Ticketsystem senden (ohne manuelle Bestätigung)
+            auto_send: Historischer Simulationsschalter. Protokolliert den vorgesehenen
+                Versand, löst aber keinen externen Aufruf aus.
 
         Returns:
             Zusammenfassung der Verarbeitung
@@ -101,11 +104,11 @@ class TicketWorkflowOrchestrator:
                     f"Batch #{result.get('batch_number')} erstellt mit {findings_count} Findings"
                 )
 
-                # Optional: Automatisch senden
+                # Historischer Simulationszweig für einen früher geplanten Auto-Send-Modus.
                 if auto_send:
-                    # TODO: Integration mit echtem Ticketsystem
+                    # Bewusst nur Simulation: Der aktive Versandpfad benötigt einen
+                    # TicketDispatcher und wird über die HTTP-Dispatch-Endpunkte aufgerufen.
                     logger.info(f"Auto-Send ist aktiviert, würde Batch {batch_id_for_log} senden")
-                    # await self.batch_service.send_batch_to_ticketsystem(...)
                 else:
                     # Warte auf manuelle Bestätigung via API
                     logger.info(
