@@ -22,8 +22,8 @@ Clients und injizieren sie in Ticketvorbereitung und Dispatcher.
 - Integrationen können einzeln aktiviert, getestet oder ersetzt werden.
 - Konfiguration, Credentials, TLS, Timeouts und Retry-Verhalten gehören zur jeweiligen
   Adaptergrenze.
-- Der Dispatcher muss Ergebnisse pro Finding und Client sichtbar machen; das heutige
-  Verschlucken einzelner Fehler ist Architekturarbeit, keine gewünschte Semantik.
+- Der Dispatcher liefert ein strukturiertes Ergebnis pro Finding und Client. Adapterfehler
+  werden dadurch trotz lokaler Protokollierung für den Batch-Lebenszyklus sichtbar.
 - Mehrere aktivierte Clients bedeuten mehrere externe Nebenwirkungen pro Finding.
 
 ## Historische Evidenz

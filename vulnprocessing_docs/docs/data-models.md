@@ -79,7 +79,7 @@ Ein *ImportRun* dokumentiert einen einzelnen Importvorgang. Er speichert Statist
 
 ## Ticket Batch (`TicketBatch`)
 
-Ticket‑Batches gruppieren mehrere Findings, um sie gesammelt an ein externes Ticketsystem zu übergeben. Sie speichern den Verarbeitungsstatus (z. B. `created`, `pending`, `processing`, `completed`), die Anzahl der verarbeiteten Findings und ggf. eine externe Batch‑ID.
+Ticket‑Batches gruppieren mehrere Findings, um sie gesammelt an externe Ticketsysteme zu übergeben. Sie speichern den Verarbeitungsstatus (`created`, `pending`, `processing`, `completed`, `failed`, `partially_failed` oder `partially_completed`), die Anzahl der verarbeiteten Findings und ggf. eine externe Batch‑ID. `partially_failed` bezeichnet einen Teilerfolg beim Dispatch; `partially_completed` dagegen eine spätere Bestätigung mit fehlgeschlagenen Tickets.
 
 ## Ticket (`Ticket`)
 

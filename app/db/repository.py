@@ -318,6 +318,29 @@ class TicketBatchRepository:
             finding.status = FindingStatus.NEW.value
             finding.batch_id = None
 
+    def mark_batch_dispatch_partially_failed(
+        self,
+        batch: TicketBatch,
+        error_message: str,
+        successful_finding_ids: frozenset[int],
+    ) -> None:
+        """Record a terminal partial dispatch without retrying successful side effects."""
+
+        failed_at = datetime.now(UTC)
+        batch.status = TicketBatchStatus.PARTIALLY_FAILED.value
+        batch.last_error = error_message
+        batch.confirmation_token_hash = None
+        batch.retry_count += 1
+        batch.sent_at = failed_at
+        batch.completed_at = failed_at
+
+        for finding in batch.findings:
+            finding.status = (
+                FindingStatus.TICKET_CREATED.value
+                if finding.id in successful_finding_ids
+                else FindingStatus.QUEUED.value
+            )
+
     def get_batch_by_id(self, batch_id: int) -> TicketBatch | None:
         """Ruft einen Batch anhand seiner ID ab."""
         return self.session.get(TicketBatch, batch_id)

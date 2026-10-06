@@ -14,6 +14,8 @@ Query-Parameter:
 - `dry_run` (optional, default false): Nur simulieren, keine Tickets senden
 
 Fehler:
+- `502`: Mindestens ein externer Versandversuch ist fehlgeschlagen (`detail.code = dispatch_failed`)
+- `503`: Es ist kein Ticket-Client aktiviert (`detail.code = dispatch_unavailable`)
 - `500`: Dispatch fehlgeschlagen (`detail.code = dispatch_failed`)
 Siehe auch: `api/errors.md`
 
@@ -30,6 +32,9 @@ Antwort (Beispiel):
   "code": null
 }
 ```
+
+Ein Aufruf gilt nur dann als erfolgreich, wenn jedes ausgewählte Finding an jeden
+aktivierten Client übertragen wurde.
 
 ## POST /tickets/batch/{id}/dispatch
 
@@ -52,6 +57,11 @@ Antwort (Beispiel):
   "code": null
 }
 ```
+
+Der Batch wechselt nur bei vollständig erfolgreichem Versand nach `pending`. Ohne
+aktive Clients oder bei ausschließlich fehlgeschlagenen Versuchen wird er `failed`.
+Gemischte Ergebnisse werden als `partially_failed` gespeichert und nicht automatisch
+erneut versendet, damit bereits erzeugte externe Tickets nicht dupliziert werden.
 
 ## POST /tickets/batch/{id}/send (deprecated)
 

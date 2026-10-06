@@ -74,6 +74,11 @@ API:
 - `POST /tickets/dispatch` dispatcht offene Findings an konfigurierte Clients.
 - `POST /tickets/batch/{id}/dispatch` dispatcht einen vorbereiteten Batch.
 
+Ein Dispatch gilt nur als erfolgreich, wenn jedes Finding an jeden aktivierten Client
+übertragen wurde. Batches ohne erfolgreichen Versand werden nicht mehr auf `pending`
+gesetzt; Teilerfolge erhalten den terminalen Status `partially_failed`, um bereits
+erzeugte externe Tickets nicht durch eine automatische Wiederholung zu duplizieren.
+
 ### Management-Authentifizierung
 
 Alle Import-, Ticket- und Batch-Management-Routen benötigen ein Bearer-Credential.

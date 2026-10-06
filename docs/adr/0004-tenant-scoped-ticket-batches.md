@@ -18,12 +18,19 @@ Batch besitzt eine Nummer, einen Status, Findings, Versandzeitpunkte, externe Re
 und Bestätigungsinformationen. Ein noch offener Batch blockiert die Erzeugung des
 nächsten Batches für denselben Tenant.
 
+Der Dispatch gilt nur als erfolgreich, wenn jedes Finding an jeden aktivierten Client
+übertragen wurde. Vollständige Fehler und fehlende Clients führen zu `failed` und geben
+die Findings für einen späteren Versuch frei. Teilerfolge führen zum terminalen Zustand
+`partially_failed`; bereits erfolgreiche Findings bleiben dem Batch zugeordnet, um eine
+blinde Wiederholung mit möglichen Ticket-Duplikaten zu verhindern. Nur ein vollständig
+erfolgreicher Dispatch erzeugt einen bestätigbaren `pending`-Batch.
+
 ## Konsequenzen
 
 - Tenantgrenzen werden im Datenmodell sichtbar.
 - Zustandsübergänge sind Teil der Geschäftslogik und müssen atomar erfolgen.
-- Versandfehler, Teilerfolg, Wiederholung und fehlende Clients benötigen eindeutige
-  Zustände und Erfolgsregeln.
+- Versandfehler, Teilerfolg und fehlende Clients besitzen eindeutige Zustände und
+  Erfolgsregeln; eine manuelle Auflösung von `partially_failed` bleibt erforderlich.
 - Externe Nebenwirkungen brauchen Idempotenz, da sie nicht gemeinsam mit der Datenbank
   transaktional abgeschlossen werden können.
 
@@ -34,5 +41,5 @@ nächsten Batches für denselben Tenant.
 - Commit `6ec013a` vom 19. November 2025 ergänzte Batch-, Workflow- und API-Tests.
 - `app/services/batch_ticketing_service.py`, `app/db/models.py` und
   `app/api/routes_tickets.py` bilden den heutigen Ablauf.
-- Die ursprünglichen fachlichen Regeln für Teilfehler sind nicht vollständig erhalten
-  und im heutigen Code noch nicht abschließend modelliert.
+- Die Regeln für Dispatch-Teilfehler wurden bei der Portfolio-Härtung ergänzt; sie sind
+  daher eine nachträgliche Entscheidung und keine rekonstruierte historische Vorgabe.
