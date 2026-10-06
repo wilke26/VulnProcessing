@@ -7,15 +7,9 @@ stellt Methoden bereit, um Gespräche zu starten und zu schließen, Nachrichten
 zu senden und die Antworten abzurufen, sowie eine Hilfsmethode, um
 AI-generierte Remediation-Guides zurückzugeben.
 
-Die Konfiguration wird über app.core.config.settings eingelesen. Dabei
-werden sowohl das neue Feld `COPILOT_STUDIO_URL` als auch das alte
-`COPILOT_STUDIO_ENDPOINT` unterstützt. Der HTTP-Timeout ist über
-`COPILOT_TIMEOUT_SECONDS` konfigurierbar.
-
-Hinweis:
-Wenn du die echte Copilot-API integrierst, ersetze die Implementierung von
-`get_remediation()` durch einen HTTP-Aufruf und parse den JSON-Response in ein
-RemediationGuide-Objekt.
+Die Konfiguration wird über ``app.core.config.settings`` eingelesen. Basis-URL,
+Secret und HTTP-Timeout stammen aus ``COPILOT_STUDIO_URL``,
+``COPILOT_STUDIO_SECRET`` und ``COPILOT_TIMEOUT_SECONDS``.
 """
 
 from __future__ import annotations
@@ -36,7 +30,7 @@ class CopilotStudioClient:
     """Low-Level-Client für Microsoft Copilot Studio."""
 
     def __init__(self) -> None:
-        # API‑Basisadresse bevorzugt aus COPILOT_STUDIO_URL, sonst COPILOT_STUDIO_ENDPOINT
+        # Der getattr-Fallback hält den Client gegenüber älteren Settings-Objekten kompatibel.
         endpoint = getattr(settings, "COPILOT_STUDIO_URL", None) or getattr(
             settings, "COPILOT_STUDIO_ENDPOINT", None
         )
@@ -171,7 +165,8 @@ class CopilotStudioClient:
         """
         Holt einen Remediation Guide von Copilot aus einem Prompt.
         Gibt ein RemediationGuide-Objekt zurück, dessen Anleitungen aus dem
-        Bot-Text bestehen. Der Confidence Score ist im Stub immer 0.0.
+        Bot-Text bestehen. Da Direct Line keinen Confidence Score liefert, wird
+        dieser Wert mit 0.0 belegt.
         """
 
         try:

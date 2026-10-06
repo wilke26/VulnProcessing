@@ -1,8 +1,9 @@
 """
 REST-basierte Ticket-Clients.
 
-Aktuell Platzhalter: REST-Integration ist noch nicht aktiv verdrahtet.
-Die Klassen sind separat, damit E-Mail und REST klar getrennt sind.
+Die Clients werden über ``build_ticket_client_registry`` aktiviert, wenn das
+jeweilige REST-Feature-Flag und die zugehörigen Zugangsdaten gesetzt sind.
+Die Klassen bleiben separat, damit E-Mail- und REST-Transport klar getrennt sind.
 """
 
 from __future__ import annotations

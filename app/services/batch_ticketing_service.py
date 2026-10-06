@@ -3,7 +3,7 @@ Dieses Modul implementiert den BatchTicketingService, der die automatisierte und
 Erstellung von Tickets in externen Systemen (wie MKS oder DocBee) orchestratiert.
 
 Der Service unterstützt:
-- Batch-Verarbeitung zur Laststeuerung (standardmäßig 5 Findings pro Batch).
+- Batch-Verarbeitung zur Laststeuerung mit konfigurierbarer Batch-Größe.
 - Zustandsüberwachung der Batches (CREATED, PENDING, PROCESSING, COMPLETED, FAILED).
 - Vorbereitung der Findings (z.B. Filterung bereits gepatchter Windows-Systeme).
 - Transaktionssicherheit über das Unit-of-Work-Pattern.
@@ -59,6 +59,7 @@ class BatchTicketingService:
         Args:
             batch_size (int): Maximale Anzahl an Findings, die in einem Batch
                 zusammengefasst werden.
+            max_candidates_per_operation (int): Maximale Anzahl geprüfter Findings pro Aufruf.
             db_session (Session, optional): Eine bestehende SQLAlchemy-Session (primär für Tests).
         """
         self.batch_size = batch_size
@@ -231,14 +232,14 @@ class BatchTicketingService:
             session: Session = self._db_session
             return await self._send_batch_with_session(session, batch_id, ticket_connector)
         else:
-            # Production-Modus mit UnitOfWork
+            # Ohne injizierte Session verwaltet UnitOfWork die Transaktion.
             with UnitOfWork() as uow:
                 return await self._send_batch_with_session(uow.session, batch_id, ticket_connector)
 
     async def dispatch_batch(
         self, batch_id: int, dispatcher: TicketDispatcherProtocol
     ) -> dict[str, Any]:
-        # Dispatcht einen Batch über den TicketDispatcher (neue Pipeline).
+        # Dispatcht einen Batch über den konfigurierten TicketDispatcher.
         if self._db_session is not None:
             session: Session = self._db_session
             return await self._dispatch_batch_with_session(session, batch_id, dispatcher)
@@ -393,7 +394,7 @@ class BatchTicketingService:
                 dispatch_token,
             )
         else:
-            # Production-Modus mit UnitOfWork
+            # Ohne injizierte Session verwaltet UnitOfWork die Transaktion.
             with UnitOfWork() as uow:
                 return self._confirm_batch_with_session(
                     uow.session,
