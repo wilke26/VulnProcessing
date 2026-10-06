@@ -7,7 +7,7 @@ das Senden an externe Systeme und die Nachverfolgung des Status.
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -23,6 +23,7 @@ from app.core.management_auth import (
     require_management_operation,
     require_tenant_access,
 )
+from app.core.resource_limits import enforce_management_capacity
 from app.core.security import (
     WebhookAuthenticationError,
     WebhookConfigurationError,
@@ -54,7 +55,7 @@ def _error_detail(code: str, error: str) -> dict[str, str]:
     return {"error": error, "code": code}
 
 
-@management_router.post("/create")
+@management_router.post("/create", dependencies=[Depends(enforce_management_capacity)])
 async def create_tickets(
     tenant_name: str | None = Query(None, description="Filter nach Tenant (Mandant)"),
     min_risk: float | None = Query(None, description="Minimaler Risk-Score zur Filterung"),
@@ -98,7 +99,9 @@ async def create_tickets(
                 query = query.filter(Finding.risk >= min_risk)
 
             # Nur Findings mit Status 'new' berücksichtigen
-            findings = query.filter(Finding.status == FindingStatus.NEW.value).all()
+            findings = _load_bounded_ticket_findings(
+                query.filter(Finding.status == FindingStatus.NEW.value)
+            )
 
         # Wenn keine Findings gefunden wurden, frühzeitig zurückkehren
         if not findings:
@@ -150,7 +153,7 @@ async def create_tickets(
         ) from e
 
 
-@management_router.post("/dispatch")
+@management_router.post("/dispatch", dependencies=[Depends(enforce_management_capacity)])
 async def dispatch_tickets(
     tenant_name: str | None = Query(None, description="Filter nach Tenant (Mandant)"),
     min_risk: float | None = Query(None, description="Minimaler Risk-Score zur Filterung"),
@@ -177,7 +180,9 @@ async def dispatch_tickets(
                 query = query.filter(Tenant.name.in_(principal.tenants))
             if min_risk:
                 query = query.filter(Finding.risk >= min_risk)
-            findings = query.filter(Finding.status == FindingStatus.NEW.value).all()
+            findings = _load_bounded_ticket_findings(
+                query.filter(Finding.status == FindingStatus.NEW.value)
+            )
 
         if not findings:
             # Wenn keine Findings vorhanden sind, im Nicht-Dry-Run-Fall dennoch den Dispatcher
@@ -244,11 +249,11 @@ class BatchConfirmation(BaseModel):
     batch_id: int = Field(gt=0)
     successful_count: int = Field(ge=0)
     failed_count: int = Field(default=0, ge=0)
-    ticket_confirmations: list[TicketConfirmation] | None = None
+    ticket_confirmations: list[TicketConfirmation] | None = Field(default=None, max_length=100)
     dispatch_token: str = Field(min_length=43, max_length=43, pattern=r"^[A-Za-z0-9_-]{43}$")
 
 
-@management_router.post("/batch/create")
+@management_router.post("/batch/create", dependencies=[Depends(enforce_management_capacity)])
 async def create_ticket_batch(
     tenant_name: str,
     min_risk: float = 0.0,
@@ -303,7 +308,9 @@ async def create_ticket_batch(
         ) from e
 
 
-@management_router.post("/batch/{batch_id}/send")
+@management_router.post(
+    "/batch/{batch_id}/send", dependencies=[Depends(enforce_management_capacity)]
+)
 async def send_batch(
     batch_id: int,
     principal: ManagementPrincipal = Depends(require_management_operation(BATCHES_DISPATCH)),
@@ -349,7 +356,9 @@ async def send_batch(
         ) from e
 
 
-@management_router.post("/batch/{batch_id}/dispatch")
+@management_router.post(
+    "/batch/{batch_id}/dispatch", dependencies=[Depends(enforce_management_capacity)]
+)
 async def dispatch_batch(
     batch_id: int,
     principal: ManagementPrincipal = Depends(require_management_operation(BATCHES_DISPATCH)),
@@ -384,10 +393,17 @@ async def dispatch_batch(
         ) from e
 
 
-@webhook_router.post("/batch/confirm")
+@webhook_router.post(
+    "/batch/confirm",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {"application/json": {"schema": BatchConfirmation.model_json_schema()}},
+        }
+    },
+)
 async def confirm_batch(
     request: Request,
-    confirmation: BatchConfirmation,
     webhook_signature: Annotated[str | None, Header(alias="X-Webhook-Signature")] = None,
     webhook_timestamp: Annotated[str | None, Header(alias="X-Webhook-Timestamp")] = None,
 ):
@@ -397,7 +413,7 @@ async def confirm_batch(
     Dieser Endpunkt kann von Webhooks externer Systeme oder manuellen Prozessen aufgerufen werden.
 
     Args:
-        confirmation (BatchConfirmation): Daten zur Bestätigung (Erfolg/Fehler).
+        request (Request): Roher, signierter JSON-Request-Body zur Bestätigung.
 
     Returns:
         dict: Bestätigung der durchgeführten Aktualisierung in der Datenbank.
@@ -406,8 +422,9 @@ async def confirm_batch(
         HTTPException: Wenn der Batch nicht gefunden wurde oder die Bestätigung fehlschlägt.
     """
     try:
+        body = await request.body()
         verify_webhook_signature(
-            body=await request.body(),
+            body=body,
             signature=webhook_signature,
             timestamp=webhook_timestamp,
             secret=settings.BATCH_CONFIRM_WEBHOOK_SECRET,
@@ -425,6 +442,12 @@ async def confirm_batch(
             status_code=401,
             detail=_error_detail("invalid_webhook_auth", "Ungültige Webhook-Authentifizierung"),
         ) from exc
+
+    try:
+        confirmation = BatchConfirmation.model_validate_json(body)
+    except ValidationError as exc:
+        errors = [{**error, "loc": ("body", *error.get("loc", ()))} for error in exc.errors()]
+        raise HTTPException(status_code=422, detail=errors) from exc
 
     try:
         service = build_batch_ticketing_service()
@@ -569,6 +592,22 @@ def _require_batch_tenant_access(batch_id: int, principal: ManagementPrincipal) 
             raise HTTPException(status_code=404, detail="Batch nicht gefunden")
         if not principal.allows_tenant(batch.tenant.name):
             raise HTTPException(status_code=404, detail="Batch nicht gefunden")
+
+
+def _load_bounded_ticket_findings(query):
+    """Materialize at most the configured number of findings before expensive work."""
+
+    limit = settings.MAX_FINDINGS_PER_TICKET_OPERATION
+    findings = query.limit(limit + 1).all()
+    if len(findings) > limit:
+        raise HTTPException(
+            status_code=422,
+            detail=_error_detail(
+                "operation_item_limit_exceeded",
+                "Zu viele Findings; Tenant- oder Risiko-Filter weiter einschränken",
+            ),
+        )
+    return findings
 
 
 router.include_router(management_router)

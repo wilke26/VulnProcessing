@@ -90,7 +90,8 @@ Fehlerantworten verwenden – abgesehen von FastAPI-Schemafehlern – dieses For
 | 409 | `invalid_batch_state` | Batch ist nicht `pending`, Versandzeit oder Dispatch-Token fehlen beziehungsweise das Token gehört nicht zum aktiven Versand. |
 | 409 | `invalid_confirmation_counts` | Zähler sind negativ oder passen nicht zur Batch-Größe. |
 | 409 | `invalid_confirmation_details` | Einzelbestätigungen fehlen, sind doppelt oder passen nicht zu Findings und Zählern. |
-| 422 | FastAPI-Validierungsfehler | JSON oder Feldformat entspricht nicht dem Request-Schema. |
+| 413 | Request zu groß | Der HTTP-Body überschreitet `MAX_REQUEST_BYTES`. |
+| 422 | Validierungsfehler | JSON, Feldformat oder mehr als 100 Einzelbestätigungen entsprechen nicht dem Request-Schema. |
 | 503 | `webhook_unavailable` | Das Webhook-Secret ist serverseitig nicht konfiguriert. |
 | 500 | `batch_confirmation_failed` | Unerwarteter interner Fehler ohne Offenlegung interner Details. |
 

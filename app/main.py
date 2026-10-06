@@ -16,6 +16,7 @@ from app.api.routes_import import router as import_router
 from app.api.routes_tickets import router as tickets_router
 from app.api.routes_version import router as version_router
 from app.core.config import settings
+from app.core.resource_limits import RequestBodyLimitMiddleware
 from app.db import init_db
 from app.services.intake import load_and_store
 
@@ -91,6 +92,7 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if settings.DEBUG else None,
         openapi_url="/openapi.json" if settings.DEBUG else None,
     )
+    app.add_middleware(RequestBodyLimitMiddleware)
 
     # Router für die verschiedenen API-Module registrieren
     app.include_router(health_router)

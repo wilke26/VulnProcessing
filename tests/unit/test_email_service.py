@@ -56,9 +56,11 @@ def test_build_message_preserves_legitimate_headers() -> None:
 
 
 class RecordingSMTP:
-    def __init__(self, host: str, port: int, events: list[object]) -> None:
+    def __init__(
+        self, host: str, port: int, events: list[object], timeout: float | None = None
+    ) -> None:
         self.events = events
-        self.events.append(("connect", host, port))
+        self.events.append(("connect", host, port, timeout))
 
     def __enter__(self):
         return self
@@ -90,7 +92,7 @@ async def test_send_uses_verifying_tls_context_before_credentials(monkeypatch) -
     monkeypatch.setattr(
         email_service.smtplib,
         "SMTP",
-        lambda host, port: RecordingSMTP(host, port, events),
+        lambda host, port, timeout: RecordingSMTP(host, port, events, timeout),
     )
 
     result = await _service().send_ticket_email(
@@ -108,6 +110,7 @@ async def test_send_uses_verifying_tls_context_before_credentials(monkeypatch) -
     assert isinstance(context, ssl.SSLContext)
     assert context.verify_mode == ssl.CERT_REQUIRED
     assert context.check_hostname is True
+    assert events[0][3] == settings.SMTP_TIMEOUT_SECONDS
 
 
 @pytest.mark.asyncio
@@ -123,7 +126,7 @@ async def test_certificate_rejection_prevents_credentials_and_message(monkeypatc
     monkeypatch.setattr(
         email_service.smtplib,
         "SMTP",
-        lambda host, port: RejectingSMTP(host, port, events),
+        lambda host, port, timeout: RejectingSMTP(host, port, events, timeout),
     )
 
     result = await _service().send_ticket_email(
@@ -141,7 +144,7 @@ async def test_explicit_tls_disable_preserves_legacy_smtp_mode(monkeypatch) -> N
     monkeypatch.setattr(
         email_service.smtplib,
         "SMTP",
-        lambda host, port: RecordingSMTP(host, port, events),
+        lambda host, port, timeout: RecordingSMTP(host, port, events, timeout),
     )
     service = EmailService(
         smtp_host="smtp.example.test",

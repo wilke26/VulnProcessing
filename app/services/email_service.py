@@ -58,6 +58,7 @@ class EmailService:
         smtp_password: str | None = None,
         use_tls: bool | None = None,
         from_address: str | None = None,
+        timeout_seconds: int | None = None,
     ):
         """
         Initialisiert den EmailService. Falls keine Parameter übergeben werden,
@@ -69,6 +70,7 @@ class EmailService:
         self.smtp_password = smtp_password or settings.SMTP_PASSWORD
         self.use_tls = use_tls if use_tls is not None else settings.SMTP_USE_TLS
         self.from_address = from_address or settings.SMTP_FROM_ADDRESS
+        self.timeout_seconds = timeout_seconds or settings.SMTP_TIMEOUT_SECONDS
 
         # Prüfung der Konfiguration beim Start
         if not settings.smtp_configured:
@@ -97,7 +99,11 @@ class EmailService:
             tls_context = ssl.create_default_context() if self.use_tls else None
 
             # SMTP-Verbindung aufbauen und Nachricht senden
-            with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
+            with smtplib.SMTP(
+                self.smtp_host,
+                self.smtp_port,
+                timeout=self.timeout_seconds,
+            ) as server:
                 if tls_context is not None:
                     server.starttls(context=tls_context)
 

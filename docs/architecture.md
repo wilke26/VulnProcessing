@@ -106,8 +106,10 @@ Fehlerzustände wesentliche Anforderungen an eine spätere produktive Nutzung.
   lokale, nicht einzucheckende `.env` konfiguriert.
 - Ausgehende Verbindungen verlassen die Vertrauensgrenze der Anwendung. Der
   SMTP-Adapter prüft bei STARTTLS Zertifikatskette und Hostnamen. Zielsystemfreigabe,
-  Timeouts, Parallelitätsgrenzen und entsprechende Garantien der übrigen Adapter bleiben
-  explizite Anforderungen.
+  Antwortgrößen und entsprechende Garantien der übrigen Adapter bleiben explizite
+  Anforderungen. Eingehende Body-Größe, teure gleichzeitige Management-Aufrufe,
+  Ticket-Kandidaten und Batch-Scans sind pro Prozess begrenzt; mehrere Worker brauchen
+  zusätzlich Admission Control auf Proxy- oder Orchestrator-Ebene.
 - Das Repository ist Quellcode für eine Bewerbungsreferenz. Es ist keine Freigabe für
   ein öffentlich erreichbares Deployment.
 
@@ -129,7 +131,7 @@ unterstützten Deploymentvarianten. Für die Bewerbungsreferenz gilt daher die i
 ## Bekannte Architekturarbeit
 
 - atomarer, idempotenter Dispatch mit ausdrücklichen Erfolgs- und Fehlerergebnissen;
-- Größen-, Laufzeit- und Parallelitätsgrenzen an allen extern erreichbaren Pfaden;
+- Antwortgrößen- und Item-Limits für externe Adapter sowie Fleet-weite Admission Control;
 - verifizierte Transportverschlüsselung für die übrigen credentialtragenden Adapter;
 - konsistente öffentliche Fehlerverträge ohne interne Pfade oder Exceptions;
 - Bereinigung der parallelen alten und neuen Persistenz-/Intake-Pfade;

@@ -37,6 +37,7 @@ def build_batch_ticketing_service(
 ) -> BatchTicketingService:
     service = BatchTicketingService(
         batch_size=batch_size,
+        max_candidates_per_operation=settings_obj.MAX_BATCH_CANDIDATES_PER_OPERATION,
         db_session=db_session,
         prep_service=prep_service or build_ticket_preparation(settings_obj=settings_obj),
     )

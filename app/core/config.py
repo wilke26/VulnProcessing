@@ -69,7 +69,8 @@ class Settings(BaseSettings):
     # Time-to-Live für den Copilot-Cache in Sekunden
     COPILOT_CACHE_TTL: int = 3600
     # Maximale Anzahl gleichzeitiger Anfragen an Copilot
-    COPILOT_CONCURRENT_REQUESTS: int = 5
+    COPILOT_CONCURRENT_REQUESTS: int = Field(default=5, gt=0, le=50)
+    COPILOT_TIMEOUT_SECONDS: int = Field(default=30, gt=0, le=300)
 
     # --- DocBee Integration ---
     # Basis-URL der DocBee-Instanz
@@ -99,7 +100,7 @@ class Settings(BaseSettings):
     # API-Schlüssel für N-Central
     NCENTRAL_API_KEY: str = ""
     # Timeout für API-Anfragen an N-Central in Sekunden
-    NCENTRAL_TIMEOUT: int = 30
+    NCENTRAL_TIMEOUT: int = Field(default=30, gt=0, le=300)
 
     # --- Nist NVD ---
     # API-Schlüssel für die NVD-API
@@ -107,7 +108,7 @@ class Settings(BaseSettings):
     NVD_BASE_URL: str = "https://services.nvd.nist.gov/rest/json/cves/2.0"
     NVD_RATE_LIMIT: int = 5
     NVD_RATE_LIMIT_WITH_KEY: int = 50
-    NVD_TIMEOUT: int = 30
+    NVD_TIMEOUT: int = Field(default=30, gt=0, le=300)
     NVD_CACHE_TTL: int = 86400
 
     # --- SMTP / E-Mail Konfiguration ---
@@ -116,6 +117,7 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_USE_TLS: bool = True
+    SMTP_TIMEOUT_SECONDS: int = Field(default=30, gt=0, le=300)
     SMTP_FROM_ADDRESS: str = "vulnprocessing@localhost"
 
     # --- Ticket-Systeme (E-Mail) ---
@@ -130,8 +132,12 @@ class Settings(BaseSettings):
     BATCH_CONFIRM_WEBHOOK_CLOCK_SKEW_SECONDS: int = Field(default=30, ge=0)
 
     # --- Import-Limits ---
-    MAX_IMPORT_BYTES: int = 10 * 1024 * 1024
-    MAX_FINDINGS_PER_IMPORT: int = 10_000
+    MAX_REQUEST_BYTES: int = Field(default=11 * 1024 * 1024, gt=0)
+    MAX_IMPORT_BYTES: int = Field(default=10 * 1024 * 1024, gt=0)
+    MAX_FINDINGS_PER_IMPORT: int = Field(default=10_000, gt=0)
+    MAX_FINDINGS_PER_TICKET_OPERATION: int = Field(default=500, gt=0, le=10_000)
+    MAX_BATCH_CANDIDATES_PER_OPERATION: int = Field(default=50, gt=0, le=500)
+    MAX_CONCURRENT_MANAGEMENT_OPERATIONS: int = Field(default=4, gt=0, le=100)
 
     # --- Pfade ---
     PRIORITIZATION_CONFIG_PATH: str = "config/prioritization.json"
@@ -238,6 +244,12 @@ class Settings(BaseSettings):
             raise ValueError(
                 "BATCH_CONFIRM_WEBHOOK_CLOCK_SKEW_SECONDS muss kleiner als "
                 "BATCH_CONFIRM_WEBHOOK_MAX_AGE_SECONDS sein."
+            )
+
+        if self.MAX_REQUEST_BYTES < self.MAX_IMPORT_BYTES + 64 * 1024:
+            raise ValueError(
+                "MAX_REQUEST_BYTES muss mindestens 64 KiB größer als MAX_IMPORT_BYTES "
+                "sein, damit Multipart-Metadaten zusätzlich zur Importdatei Platz haben."
             )
 
         subjects: set[str] = set()

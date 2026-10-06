@@ -146,6 +146,22 @@ def test_unauthenticated_import_is_rejected_before_multipart_parsing(
     assert response.json()["detail"]["code"] == "invalid_management_auth"
 
 
+def test_unauthenticated_oversized_import_is_rejected_before_body_consumption(
+    monkeypatch, real_management_auth
+) -> None:
+    monkeypatch.setattr(settings, "MANAGEMENT_CREDENTIALS", [_credential(TOKEN_A)])
+    monkeypatch.setattr(settings, "MAX_REQUEST_BYTES", 1)
+
+    response = TestClient(app).post(
+        "/findings/import",
+        content=b"oversized but never consumed",
+        headers={"Content-Type": "multipart/form-data; boundary=missing"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "invalid_management_auth"
+
+
 def test_ticket_creation_uses_finding_status_after_tenant_join(
     db_session, monkeypatch, real_management_auth
 ) -> None:

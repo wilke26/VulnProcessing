@@ -11,6 +11,7 @@ import pytest
 
 from app.core.security import issue_dispatch_confirmation_token
 from app.db.models import Asset, Finding, FindingStatus, Tenant, TicketBatch, TicketBatchStatus
+from app.services.batch_ticketing_service import BatchTicketingService
 from app.services.composition_root import build_batch_ticketing_service
 
 
@@ -126,6 +127,44 @@ class TestBatchTicketingService:
         # Assert: 1 Finding im Batch, 2 wurden gefiltert
         assert result.get("findings_count") == 1
         assert result.get("filtered_count") == 2
+
+    @pytest.mark.asyncio
+    async def test_create_next_batch_stops_at_candidate_budget(self, db_session):
+        tenant = Tenant(name="CandidateBudgetTenant")
+        asset = Asset(tenant=tenant, name="server01")
+        db_session.add_all([tenant, asset])
+        db_session.flush()
+        findings = []
+        for index in range(3):
+            finding = Finding(
+                tenant_id=tenant.id,
+                asset_id=asset.id,
+                name=f"Finding {index}",
+                target="server01",
+                risk=5.0,
+                amount=1,
+                extended_solution_json='["Fix"]',
+                status=FindingStatus.NEW.value,
+            )
+            findings.append(finding)
+            db_session.add(finding)
+        db_session.commit()
+
+        prep_service = AsyncMock()
+        prep_service.prepare_for_ticketing.return_value = []
+        service = BatchTicketingService(
+            batch_size=2,
+            max_candidates_per_operation=2,
+            db_session=db_session,
+            prep_service=prep_service,
+        )
+
+        result = await service.create_next_batch(tenant_name=tenant.name)
+
+        assert result["status"] == "limit_reached"
+        assert prep_service.prepare_for_ticketing.await_count == 1
+        assert [finding.status for finding in findings].count(FindingStatus.FILTERED.value) == 2
+        assert [finding.status for finding in findings].count(FindingStatus.NEW.value) == 1
 
     def test_confirm_batch_completion_updates_status(self, db_session):
         """
