@@ -22,6 +22,18 @@ class TestBatchAPIEndpoints:
     Testet die Funktionalität der API-Endpunkte zur Batch-Verarbeitung.
     """
 
+    def test_create_batch_endpoint_returns_404_for_unknown_tenant(self, db_session):
+        response = TestClient(app).post(
+            "/tickets/batch/create",
+            params={"tenant_name": "MissingTenant"},
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == {
+            "error": "Mandant nicht gefunden",
+            "code": "tenant_not_found",
+        }
+
     def test_create_batch_endpoint_returns_batch_info(self, db_session):
         """
         Prüft, ob der Endpunkt POST /tickets/batch/create erfolgreich einen Batch erstellt
