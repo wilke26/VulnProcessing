@@ -140,7 +140,8 @@ def intake_findings(unified: UnifiedFindingsInput) -> int:
         if not deduped_items:
             return 0
 
-        # Annahme: Alle Findings in einem Import gehören zum selben Tenant
+        # Der erste Datensatz legt den Tenant des Importlaufs fest; abweichende
+        # Datensätze werden unten als Fehler gezählt und nicht persistiert.
         tenant_name = deduped_items[0].tenant
         tenant = uow.tenants.get_or_create(tenant_name)
 
@@ -157,8 +158,7 @@ def intake_findings(unified: UnifiedFindingsInput) -> int:
 
         for dto in deduped_items:
             try:
-                # Falls unterschiedliche Tenant-Namen in einer Charge vorkommen,
-                # wird dies aktuell als Fehler gewertet.
+                # Ein ImportRun ist genau einem Tenant zugeordnet.
                 if dto.tenant != tenant_name:
                     logger.error(
                         f"Mandanten-Konflikt im Import-Lauf {import_run.id}: "

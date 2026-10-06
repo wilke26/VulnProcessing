@@ -57,7 +57,7 @@ class TestCompleteTicketingWorkflow:
         )
         client = TestClient(app)
 
-        # 1. Import: Simulation einer Dateianlieferung (JSON)
+        # Import einer repräsentativen JSON-Dateianlieferung.
         json_data = {
             "schema_version": 1,
             "source": "lywand",
@@ -83,19 +83,19 @@ class TestCompleteTicketingWorkflow:
         )
         assert import_response.status_code == 200
 
-        # 2. Batch erstellen: Gruppierung der Findings für den Mandanten
+        # Findings tenantbezogen in einem Batch gruppieren.
         batch_response = client.post(
             "/tickets/batch/create", params={"tenant_name": "E2E_Workflow_Tenant"}
         )
         assert batch_response.status_code == 200
         batch_id = batch_response.json()["batch_id"]
 
-        # 3. Batch senden: Markierung als 'an externes System übergeben'
+        # Den externen Versand mit einem kontrollierten Dispatcher simulieren.
         send_response = client.post(f"/tickets/batch/{batch_id}/send")
         assert send_response.status_code == 200
         dispatch_token = send_response.json()["dispatch_token"]
 
-        # 4. Batch bestätigen: Simulation der Erfolgsmeldung vom Ticketsystem
+        # Eine gültig signierte Erfolgsmeldung des Ticketsystems simulieren.
         monkeypatch.setattr(settings, "BATCH_CONFIRM_WEBHOOK_SECRET", "test-secret")
         confirm_body = json.dumps(
             {
@@ -123,7 +123,7 @@ class TestCompleteTicketingWorkflow:
         )
         assert confirm_response.status_code == 200
 
-        # 5. Nächsten Batch erstellen: Prüfung der Sequentialität (Batch-Nummer)
+        # Nach der Bestätigung muss der nächste sequenzielle Batch möglich sein.
         next_batch_response = client.post(
             "/tickets/batch/create", params={"tenant_name": "E2E_Workflow_Tenant"}
         )

@@ -6,7 +6,7 @@ Der Dispatcher übernimmt:
 - Die Zusammenstellung von Ticket-Titeln und -Beschreibungen.
 - Die Integration von KI-generierten Behebungsleitfäden.
 - Das Mapping von Prioritäts-Scores auf menschlich lesbare Stufen.
-- Die Kommunikation mit den jeweiligen API-Connectoren.
+- Die Kommunikation mit den konfigurierten E-Mail- und REST-Clients.
 """
 
 from __future__ import annotations

@@ -4,9 +4,9 @@ Erstellung von Tickets in externen Systemen (wie MKS oder DocBee) orchestratiert
 
 Der Service unterstützt:
 - Batch-Verarbeitung zur Laststeuerung mit konfigurierbarer Batch-Größe.
-- Zustandsüberwachung der Batches (CREATED, PENDING, PROCESSING, COMPLETED, FAILED).
+- Atomare Dispatch-Claims und eine nachvollziehbare Batch-Zustandsmaschine.
 - Vorbereitung der Findings (z.B. Filterung bereits gepatchter Windows-Systeme).
-- Transaktionssicherheit über das Unit-of-Work-Pattern.
+- Explizite Transaktionsgrenzen zwischen Datenbankzustand und externen Nebenwirkungen.
 """
 
 from __future__ import annotations
@@ -42,8 +42,8 @@ class BatchTicketingService:
     1. Suche nach offenen Findings ('new'), die den Risiko-Schwellenwert erfüllen.
     2. Anwendung von Vorbereitungsfiltern (z.B. Windows-Patch-Status).
     3. Gruppierung der Findings in einen Batch.
-    4. Versand an das Ziel-Ticketsystem.
-    5. Überwachung des Bestätigungsstatus.
+    4. Atomare Beanspruchung und Versand an die aktiven Ticket-Clients.
+    5. Verifikation und Verarbeitung der externen Bestätigung.
     """
 
     def __init__(
@@ -85,7 +85,6 @@ class BatchTicketingService:
             dict | None: Metadaten des erstellten Batches oder Fehlermeldung/Status.
         """
         if self._db_session is not None:
-            # Lokale Variable für Type-Safety und Verwendung der bereitgestellten Session
             session: Session = self._db_session
             result = await self._create_batch_with_session(
                 session, tenant_name, min_risk, target_system
@@ -93,7 +92,7 @@ class BatchTicketingService:
             session.commit()
             return result
         else:
-            # Standardmodus: Nutzung des UnitOfWork Patterns für automatische Transaktionsverwaltung
+            # Im Anwendungsbetrieb verwaltet die Unit of Work den Session-Lebenszyklus.
             with UnitOfWork() as uow:
                 result = await self._create_batch_with_session(
                     uow.session, tenant_name, min_risk, target_system
@@ -145,12 +144,12 @@ class BatchTicketingService:
             logger.error(f"Tenant '{tenant_name}' nicht gefunden")
             return {"status": "error", "message": f"Tenant '{tenant_name}' not found"}
 
-        # 2. Sequentialitäts-Prüfung: Nur ein offener Batch pro Tenant erlaubt
+        # Pro Tenant darf nur ein noch nicht abschließend behandelter Batch existieren.
         pending_batch = batch_repo.get_next_pending_batch(tenant.id)
         if pending_batch:
             logger.warning(
-                f"Batch #{pending_batch.batch_number} wartet noch auf "
-                f"Bestätigung. Keine neuen Batches bis zur Bestätigung."
+                f"Batch #{pending_batch.batch_number} ist noch offen "
+                f"(Status: {pending_batch.status}). Keine neue Batch-Erstellung."
             )
             return {
                 "status": "pending",
@@ -182,7 +181,7 @@ class BatchTicketingService:
                 finding.status = FindingStatus.FILTERED.value
             session.flush()
 
-            # Rekursiv nächsten Batch versuchen
+            # Im verbleibenden Kandidatenbudget nach weiteren Findings suchen.
             return await self._create_batch_with_session(
                 session,
                 tenant_name,
@@ -218,17 +217,9 @@ class BatchTicketingService:
     async def send_batch_to_ticketsystem(
         self, batch_id: int, ticket_connector: Any
     ) -> dict[str, Any]:
-        # Sendet einen Batch an das Ticketsystem.
-
-        # Args:
-        #     batch_id: ID des Batches
-        #     ticket_connector: Connector zum Ticketsystem
-
-        # Returns:
-        #     Dict mit Ergebnis
+        """Sendet einen Batch über den älteren direkten Connector-Pfad."""
 
         if self._db_session is not None:
-            # Lokale Variable für Type-Safety
             session: Session = self._db_session
             return await self._send_batch_with_session(session, batch_id, ticket_connector)
         else:
@@ -239,7 +230,7 @@ class BatchTicketingService:
     async def dispatch_batch(
         self, batch_id: int, dispatcher: TicketDispatcherProtocol
     ) -> dict[str, Any]:
-        # Dispatcht einen Batch über den konfigurierten TicketDispatcher.
+        """Beansprucht einen neuen Batch und übergibt ihn an die aktiven Ticket-Clients."""
         if self._db_session is not None:
             session: Session = self._db_session
             return await self._dispatch_batch_with_session(session, batch_id, dispatcher)
@@ -250,7 +241,7 @@ class BatchTicketingService:
     async def _dispatch_batch_with_session(
         self, session: Session, batch_id: int, dispatcher: TicketDispatcherProtocol
     ) -> dict[str, Any]:
-        # Interne Methode zum Dispatch mit TicketDispatcher.
+        """Beansprucht und dispatcht einen Batch mit einer expliziten Session."""
         batch_repo = TicketBatchRepository(session)
         FindingRepository(session)
 
@@ -348,7 +339,7 @@ class BatchTicketingService:
     async def _send_batch_with_session(
         self, session: Session, batch_id: int, ticket_connector: Any
     ) -> dict[str, Any]:
-        # Interne Methode zum Senden mit expliziter Session.
+        """Führt den älteren direkten Connector-Pfad mit expliziter Session aus."""
         batch_repo = TicketBatchRepository(session)
         finding_repo = FindingRepository(session)
 
@@ -416,19 +407,9 @@ class BatchTicketingService:
         ticket_confirmations: list[dict[str, Any]] | None = None,
         dispatch_token: str | None = None,
     ) -> dict[str, Any]:
-        # Bestätigt die Abarbeitung eines Batches.
-
-        # Args:
-        #     batch_id: ID des Batches
-        #     successful_count: Anzahl erfolgreich erstellter Tickets
-        #     failed_count: Anzahl fehlgeschlagener Tickets
-        #     ticket_confirmations: Optional: Liste mit Finding-ID → Status-Mappings
-
-        # Returns:
-        #     Dict mit Ergebnis
+        """Verarbeitet die an den aktiven Dispatch gebundene Batch-Bestätigung."""
 
         if self._db_session is not None:
-            # Lokale Variable für Type-Safety
             session: Session = self._db_session
             return self._confirm_batch_with_session(
                 session,
@@ -459,7 +440,7 @@ class BatchTicketingService:
         ticket_confirmations: list[dict[str, Any]] | None,
         dispatch_token: str | None,
     ) -> dict[str, Any]:
-        # Interne Methode zur Bestätigung mit expliziter Session.
+        """Validiert und speichert eine Bestätigung mit expliziter Session."""
         batch_repo = TicketBatchRepository(session)
         finding_repo = FindingRepository(session)
 

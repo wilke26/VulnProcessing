@@ -110,7 +110,8 @@ class TicketWorkflowOrchestrator:
                     # TicketDispatcher und wird über die HTTP-Dispatch-Endpunkte aufgerufen.
                     logger.info(f"Auto-Send ist aktiviert, würde Batch {batch_id_for_log} senden")
                 else:
-                    # Warte auf manuelle Bestätigung via API
+                    # Nach der Batch-Erstellung muss zunächst ein Dispatch-Endpunkt
+                    # aufgerufen werden; erst dessen Ergebnis kann bestätigt werden.
                     logger.info(
                         f"Batch {batch_id_for_log} wartet auf manuelles Senden via "
                         f"POST /tickets/batch/{batch_id_for_log}/send"
