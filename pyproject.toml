@@ -1,6 +1,6 @@
 [project]
 name = "vulnprocessing"
-version = "0.1.0"
+version = "0.2.0"
 description = "Automatisierte Konsolidierung, Priorisierung und Ticket-Erstellung von Schwachstellen-Daten"
 authors = [{ name = "Udo Wilke" }]
 readme = "README.md"
