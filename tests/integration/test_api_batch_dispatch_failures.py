@@ -15,12 +15,11 @@ class DummyDispatcher:
 
 
 class TestBatchDispatchFailures:
-    def test_dispatch_nonexistent_batch_returns_422(self, db_session, assert_error_detail):
+    def test_dispatch_nonexistent_batch_returns_404(self, db_session):
         client = TestClient(app)
         response = client.post("/tickets/batch/99999/dispatch")
-        assert response.status_code == 422
-        detail = response.json().get("detail", {})
-        assert_error_detail(detail, "batch_dispatch_failed")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Batch nicht gefunden"
 
     def test_dispatch_error_returns_422(self, db_session, monkeypatch, assert_error_detail):
         tenant = Tenant(name="TestTenant_BatchDispatchFail")

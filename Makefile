@@ -57,7 +57,7 @@ test-fast:
 
 # ---- Laufzeit (lokal) ----
 run-api:
-	$(UVICORN) app.main:app --host 0.0.0.0 --port 8000 --reload
+	$(UVICORN) app.main:app --host 127.0.0.1 --port 8000 --reload
 
 run-worker:
 	$(POETRY) run celery -A app.tasks.celery_app.celery worker --loglevel=INFO

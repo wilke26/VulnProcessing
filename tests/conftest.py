@@ -6,10 +6,25 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.core.management_auth import ManagementPrincipal, authenticate_management_request
 from app.db.models import Base
+from app.main import app
 
 # In-Memory SQLite für schnelle Tests
 TEST_DATABASE_URL = "sqlite:///:memory:"
+
+
+@pytest.fixture(autouse=True)
+def default_management_principal():
+    """Keep existing endpoint tests focused while auth has dedicated integration tests."""
+
+    app.dependency_overrides[authenticate_management_request] = lambda: ManagementPrincipal(
+        subject="test-admin",
+        tenants=frozenset({"*"}),
+        operations=frozenset({"*"}),
+    )
+    yield
+    app.dependency_overrides.pop(authenticate_management_request, None)
 
 
 @pytest.fixture(scope="session")

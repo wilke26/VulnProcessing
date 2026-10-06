@@ -16,7 +16,7 @@ services:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=info
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ../..:/app      # Live-Reload während der Entwicklung
     command: >

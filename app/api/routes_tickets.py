@@ -12,6 +12,17 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.management_auth import (
+    BATCHES_CREATE,
+    BATCHES_DISPATCH,
+    BATCHES_READ,
+    TICKETS_CREATE,
+    TICKETS_DISPATCH,
+    ManagementPrincipal,
+    authenticate_management_request,
+    require_management_operation,
+    require_tenant_access,
+)
 from app.core.security import (
     WebhookAuthenticationError,
     WebhookConfigurationError,
@@ -30,17 +41,24 @@ from app.services.composition_root import (
 logger = get_logger(__name__)
 
 # APIRouter mit Präfix und Tags für die Ticket-API
-router = APIRouter(prefix="/tickets", tags=["tickets"])
+management_router = APIRouter(
+    prefix="/tickets",
+    tags=["tickets"],
+    dependencies=[Depends(authenticate_management_request)],
+)
+webhook_router = APIRouter(prefix="/tickets", tags=["tickets"])
+router = APIRouter()
 
 
 def _error_detail(code: str, error: str) -> dict[str, str]:
     return {"error": error, "code": code}
 
 
-@router.post("/create")
+@management_router.post("/create")
 async def create_tickets(
     tenant_name: str | None = Query(None, description="Filter nach Tenant (Mandant)"),
     min_risk: float | None = Query(None, description="Minimaler Risk-Score zur Filterung"),
+    principal: ManagementPrincipal = Depends(require_management_operation(TICKETS_CREATE)),
 ):
     """
     Erstellt Tickets für offene Findings nach Anwendung von Filtern.
@@ -66,16 +84,21 @@ async def create_tickets(
         with UnitOfWork() as uow:
             query = uow.findings.get_all()
 
-            # Optionalen Filter nach Tenant-Namen anwenden
+            query = query.join(Finding.tenant)
+
+            # Tenant-Filter ausschließlich innerhalb des serverseitigen Scopes anwenden
             if tenant_name:
-                query = query.filter_by(tenant_name=tenant_name)
+                require_tenant_access(principal, tenant_name)
+                query = query.filter(Tenant.name == tenant_name)
+            elif not principal.has_all_tenants:
+                query = query.filter(Tenant.name.in_(principal.tenants))
 
             # Optionalen Filter nach minimalem Risiko anwenden
             if min_risk:
                 query = query.filter(Finding.risk >= min_risk)
 
             # Nur Findings mit Status 'new' berücksichtigen
-            findings = query.filter_by(status="new").all()
+            findings = query.filter(Finding.status == FindingStatus.NEW.value).all()
 
         # Wenn keine Findings gefunden wurden, frühzeitig zurückkehren
         if not findings:
@@ -118,6 +141,8 @@ async def create_tickets(
             "code": None,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Fehler bei Ticket-Erstellung")
         raise HTTPException(
@@ -125,11 +150,12 @@ async def create_tickets(
         ) from e
 
 
-@router.post("/dispatch")
+@management_router.post("/dispatch")
 async def dispatch_tickets(
     tenant_name: str | None = Query(None, description="Filter nach Tenant (Mandant)"),
     min_risk: float | None = Query(None, description="Minimaler Risk-Score zur Filterung"),
     dry_run: bool = Query(False, description="Nur simulieren, keine Tickets senden"),
+    principal: ManagementPrincipal = Depends(require_management_operation(TICKETS_DISPATCH)),
 ):
     """
     Dispatcht Findings an konfigurierte Ticketsysteme (E-Mail/REST Clients).
@@ -143,8 +169,12 @@ async def dispatch_tickets(
     try:
         with UnitOfWork() as uow:
             query = uow.findings.get_all()
+            query = query.join(Finding.tenant)
             if tenant_name:
-                query = query.join(Finding.tenant).filter(Tenant.name == tenant_name)
+                require_tenant_access(principal, tenant_name)
+                query = query.filter(Tenant.name == tenant_name)
+            elif not principal.has_all_tenants:
+                query = query.filter(Tenant.name.in_(principal.tenants))
             if min_risk:
                 query = query.filter(Finding.risk >= min_risk)
             findings = query.filter(Finding.status == FindingStatus.NEW.value).all()
@@ -194,6 +224,8 @@ async def dispatch_tickets(
             "error": None,
             "code": None,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Fehler beim Dispatching von Tickets")
         raise HTTPException(status_code=500, detail=_error_detail("dispatch_failed", str(e))) from e
@@ -216,12 +248,13 @@ class BatchConfirmation(BaseModel):
     dispatch_token: str = Field(min_length=43, max_length=43, pattern=r"^[A-Za-z0-9_-]{43}$")
 
 
-@router.post("/batch/create")
+@management_router.post("/batch/create")
 async def create_ticket_batch(
     tenant_name: str,
     min_risk: float = 0.0,
     target_system: str = "mks",
     db: Session = Depends(get_db),
+    principal: ManagementPrincipal = Depends(require_management_operation(BATCHES_CREATE)),
 ):
     """
     Erstellt einen neuen Batch von maximal 5 Findings für die Ticket-Erstellung.
@@ -244,6 +277,7 @@ async def create_ticket_batch(
         HTTPException: Wenn der Tenant nicht gefunden wurde oder ein Fehler auftritt.
     """
     try:
+        require_tenant_access(principal, tenant_name)
         # BatchTicketingService initialisieren und Datenbank-Session übergeben
         service = build_batch_ticketing_service(batch_size=5, db_session=db)
         result = await service.create_next_batch(
@@ -260,6 +294,8 @@ async def create_ticket_batch(
         result.setdefault("code", None)
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Fehler bei Batch-Erstellung")
         raise HTTPException(
@@ -267,8 +303,11 @@ async def create_ticket_batch(
         ) from e
 
 
-@router.post("/batch/{batch_id}/send")
-async def send_batch(batch_id: int):
+@management_router.post("/batch/{batch_id}/send")
+async def send_batch(
+    batch_id: int,
+    principal: ManagementPrincipal = Depends(require_management_operation(BATCHES_DISPATCH)),
+):
     """
     Sendet einen vorbereiteten Batch an das externe Ticketsystem.
 
@@ -282,6 +321,7 @@ async def send_batch(batch_id: int):
         HTTPException: Wenn der Batch nicht gefunden wurde.
     """
     try:
+        _require_batch_tenant_access(batch_id, principal)
         # Hinweis: Dieser Endpoint ist veraltet. Alias auf /tickets/batch/{id}/dispatch.
         service = build_batch_ticketing_service()
         dispatcher = build_ticket_dispatcher()
@@ -309,12 +349,16 @@ async def send_batch(batch_id: int):
         ) from e
 
 
-@router.post("/batch/{batch_id}/dispatch")
-async def dispatch_batch(batch_id: int):
+@management_router.post("/batch/{batch_id}/dispatch")
+async def dispatch_batch(
+    batch_id: int,
+    principal: ManagementPrincipal = Depends(require_management_operation(BATCHES_DISPATCH)),
+):
     """
     Dispatcht einen vorbereiteten Batch an die konfigurierten Ticket-Clients.
     """
     try:
+        _require_batch_tenant_access(batch_id, principal)
         service = build_batch_ticketing_service()
         dispatcher = build_ticket_dispatcher()
         result = await service.dispatch_batch(batch_id=batch_id, dispatcher=dispatcher)
@@ -340,7 +384,7 @@ async def dispatch_batch(batch_id: int):
         ) from e
 
 
-@router.post("/batch/confirm")
+@webhook_router.post("/batch/confirm")
 async def confirm_batch(
     request: Request,
     confirmation: BatchConfirmation,
@@ -419,8 +463,12 @@ async def confirm_batch(
         ) from e
 
 
-@router.get("/batch/status/{batch_id}")
-async def get_batch_status(batch_id: int, db: Session = Depends(get_db)):
+@management_router.get("/batch/status/{batch_id}")
+async def get_batch_status(
+    batch_id: int,
+    db: Session = Depends(get_db),
+    principal: ManagementPrincipal = Depends(require_management_operation(BATCHES_READ)),
+):
     """
     Ruft detaillierte Informationen und den aktuellen Status eines Batches ab.
 
@@ -438,6 +486,8 @@ async def get_batch_status(batch_id: int, db: Session = Depends(get_db)):
         with UnitOfWork() as uow:
             batch = uow.batches.get_batch_by_id(batch_id)
             if not batch:
+                raise HTTPException(status_code=404, detail="Batch nicht gefunden")
+            if not principal.allows_tenant(batch.tenant.name):
                 raise HTTPException(status_code=404, detail="Batch nicht gefunden")
 
             return {
@@ -474,8 +524,11 @@ async def get_batch_status(batch_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@router.get("/batch/statistics/{tenant_name}")
-async def get_batch_statistics(tenant_name: str):
+@management_router.get("/batch/statistics/{tenant_name}")
+async def get_batch_statistics(
+    tenant_name: str,
+    principal: ManagementPrincipal = Depends(require_management_operation(BATCHES_READ)),
+):
     """
     Liefert statistische Informationen über alle Batches eines bestimmten Tenants.
 
@@ -489,6 +542,7 @@ async def get_batch_statistics(tenant_name: str):
         HTTPException: Wenn der Tenant nicht existiert.
     """
     try:
+        require_tenant_access(principal, tenant_name)
         with UnitOfWork() as uow:
             # Mandant anhand des Namens suchen
             tenant = uow.tenants.get_by_name(tenant_name)
@@ -504,3 +558,18 @@ async def get_batch_statistics(tenant_name: str):
     except Exception as e:
         logger.exception("Fehler beim Abrufen der Statistiken")
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+def _require_batch_tenant_access(batch_id: int, principal: ManagementPrincipal) -> None:
+    """Authorize a batch using its server-side tenant relation before side effects."""
+
+    with UnitOfWork() as uow:
+        batch = uow.batches.get_batch_by_id(batch_id)
+        if not batch:
+            raise HTTPException(status_code=404, detail="Batch nicht gefunden")
+        if not principal.allows_tenant(batch.tenant.name):
+            raise HTTPException(status_code=404, detail="Batch nicht gefunden")
+
+
+router.include_router(management_router)
+router.include_router(webhook_router)
