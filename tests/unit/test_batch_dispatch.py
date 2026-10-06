@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from app.core.config import Settings
 from app.core.security import verify_dispatch_confirmation_token
-from app.db.models import Asset, Finding, FindingStatus, Tenant, TicketBatch
+from app.db.models import Asset, Base, Finding, FindingStatus, Tenant, TicketBatch
+from app.services.batch_ticketing_service import BatchTicketingService
 from app.services.composition_root import build_batch_ticketing_service
 from app.services.dispatcher import TicketDispatcher
 from app.services.ticketing_clients import TicketDispatchAttempt, TicketDispatchResult
@@ -39,6 +44,28 @@ class DummyDispatcher:
 class DummyFailDispatcher:
     async def dispatch(self, findings, **kwargs):
         raise RuntimeError("dispatch failed")
+
+
+class BlockingDispatcher(DummyDispatcher):
+    def __init__(self, entered: asyncio.Event, release: asyncio.Event):
+        super().__init__()
+        self.entered = entered
+        self.release = release
+
+    async def dispatch(self, findings, **kwargs):
+        self.entered.set()
+        await self.release.wait()
+        return await super().dispatch(findings, **kwargs)
+
+
+class CountingDispatcher(DummyDispatcher):
+    def __init__(self):
+        super().__init__()
+        self.calls = 0
+
+    async def dispatch(self, findings, **kwargs):
+        self.calls += 1
+        return await super().dispatch(findings, **kwargs)
 
 
 class NoClientDispatcher:
@@ -141,23 +168,88 @@ async def test_dispatch_batch_returns_error_on_failure(db_session):
     )
     db_session.add(finding)
     db_session.commit()
+    batch_id = batch.id
+    finding_id = finding.id
 
     service = build_batch_ticketing_service(db_session=db_session)
-    result = await service.dispatch_batch(batch_id=batch.id, dispatcher=DummyFailDispatcher())
+    result = await service.dispatch_batch(batch_id=batch_id, dispatcher=DummyFailDispatcher())
 
     assert result["success"] is False
     assert "dispatch failed" in result["error"]
 
-    # NEU: Batch-Status in DB pruefen
-    db_session.refresh(batch)
-    assert batch.status == "failed"
+    # Nach einem unstrukturierten Fehler ist unklar, ob externe Nebenwirkungen
+    # entstanden sind. Der Batch bleibt deshalb für manuelle Klärung gesperrt.
+    batch = db_session.get(TicketBatch, batch_id)
+    assert batch is not None
+    assert batch.status == "dispatching"
     assert batch.last_error == "dispatch failed"
 
-    # NEU: Findings sollten wieder auf "new" stehen und batch_id geloescht sein
-    for finding in batch.findings:
-        db_session.refresh(finding)
-        assert finding.status == FindingStatus.NEW.value
-        assert finding.batch_id is None
+    finding = db_session.get(Finding, finding_id)
+    assert finding is not None
+    assert finding.status == FindingStatus.NEW.value
+    assert finding.batch_id == batch.id
+
+
+@pytest.mark.asyncio
+async def test_concurrent_dispatch_claim_allows_only_one_external_call(tmp_path):
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'dispatch-claim.sqlite3'}",
+        connect_args={"check_same_thread": False},
+    )
+    Base.metadata.create_all(engine)
+    SessionFactory = sessionmaker(bind=engine, expire_on_commit=False)
+    setup_session = SessionFactory()
+    first_session = SessionFactory()
+    second_session = SessionFactory()
+
+    try:
+        batch, _ = _batch_with_findings(
+            setup_session,
+            count=1,
+            tenant_name="ConcurrentDispatchTenant",
+        )
+        batch_id = batch.id
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        first_dispatcher = BlockingDispatcher(entered, release)
+        second_dispatcher = CountingDispatcher()
+        first_service = BatchTicketingService(
+            db_session=first_session,
+            prep_service=NoRemediation(),
+        )
+        second_service = BatchTicketingService(
+            db_session=second_session,
+            prep_service=NoRemediation(),
+        )
+        preloaded_batch = second_session.get(TicketBatch, batch_id)
+        assert preloaded_batch is not None
+        assert preloaded_batch.status == "created"
+
+        first_task = asyncio.create_task(first_service.dispatch_batch(batch_id, first_dispatcher))
+        await entered.wait()
+
+        second_result = await second_service.dispatch_batch(batch_id, second_dispatcher)
+        assert second_result["success"] is False
+        assert "dispatching" in second_result["error"]
+        assert second_dispatcher.calls == 0
+
+        release.set()
+        first_result = await first_task
+        assert first_result["success"] is True
+
+        verify_session = SessionFactory()
+        try:
+            persisted_batch = verify_session.get(TicketBatch, batch_id)
+            assert persisted_batch is not None
+            assert persisted_batch.status == "pending"
+        finally:
+            verify_session.close()
+    finally:
+        setup_session.close()
+        first_session.close()
+        second_session.close()
+        Base.metadata.drop_all(engine)
+        engine.dispose()
 
 
 @pytest.mark.asyncio

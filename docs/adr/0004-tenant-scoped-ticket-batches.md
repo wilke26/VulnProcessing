@@ -25,6 +25,12 @@ die Findings für einen späteren Versuch frei. Teilerfolge führen zum terminal
 blinde Wiederholung mit möglichen Ticket-Duplikaten zu verhindern. Nur ein vollständig
 erfolgreicher Dispatch erzeugt einen bestätigbaren `pending`-Batch.
 
+Vor externen Nebenwirkungen beansprucht ein bedingtes Datenbank-Update den Zustand
+`created` atomar als `dispatching`. Konkurrierende Aufrufe können denselben Batch damit
+nicht gleichzeitig versenden. Bleibt nach einem unerwarteten Abbruch unklar, ob das
+externe System bereits Tickets erzeugt hat, verbleibt der Batch in `dispatching`, bis
+der Sachverhalt manuell abgeglichen wurde.
+
 ## Konsequenzen
 
 - Tenantgrenzen werden im Datenmodell sichtbar.
@@ -33,6 +39,8 @@ erfolgreicher Dispatch erzeugt einen bestätigbaren `pending`-Batch.
   Erfolgsregeln; eine manuelle Auflösung von `partially_failed` bleibt erforderlich.
 - Externe Nebenwirkungen brauchen Idempotenz, da sie nicht gemeinsam mit der Datenbank
   transaktional abgeschlossen werden können.
+- `dispatching` ist absichtlich kein automatischer Retry-Zustand; Wiederaufnahme und
+  Reconciliation bleiben eine spätere Betriebsfunktion.
 
 ## Historische Evidenz
 

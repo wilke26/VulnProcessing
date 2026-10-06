@@ -73,8 +73,10 @@ Schichtung.
 6. Ein tenantbezogener Batch fasst Findings zusammen und übergibt sie an alle
    aktivierten Ticket-Clients.
 7. Der Dispatcher liefert ein Ergebnis pro Finding und Client. Nur wenn alle Versuche
-   erfolgreich waren, wechselt der Batch nach `pending`; kein Client beziehungsweise
-   vollständiges Scheitern führt zu `failed`, ein Teilerfolg zu `partially_failed`.
+   erfolgreich waren, wechselt der zuvor atomar beanspruchte `dispatching`-Batch nach
+   `pending`; kein Client beziehungsweise vollständiges Scheitern führt zu `failed`,
+   ein Teilerfolg zu `partially_failed`. Ein unklar abgebrochener Versand bleibt zur
+   manuellen Klärung in `dispatching`.
 8. Bei erfolgreichem Batch-Dispatch wird ein zufälliges Bestätigungstoken ausgegeben;
    gespeichert wird nur dessen SHA-256-Digest.
 9. Die Bestätigung prüft HMAC, Zeitfenster, Dispatch-Token, Batch-Zustand und
