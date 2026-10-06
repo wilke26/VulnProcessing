@@ -104,9 +104,10 @@ Fehlerzustände wesentliche Anforderungen an eine spätere produktive Nutzung.
   und Dispatch-Token-Grenze.
 - Zugangsdaten und Zieladressen werden über Umgebungsvariablen beziehungsweise eine
   lokale, nicht einzucheckende `.env` konfiguriert.
-- Ausgehende Verbindungen verlassen die Vertrauensgrenze der Anwendung. TLS-Prüfung,
-  Zielsystemfreigabe, Timeouts und Parallelitätsgrenzen müssen pro Adapter garantiert
-  werden.
+- Ausgehende Verbindungen verlassen die Vertrauensgrenze der Anwendung. Der
+  SMTP-Adapter prüft bei STARTTLS Zertifikatskette und Hostnamen. Zielsystemfreigabe,
+  Timeouts, Parallelitätsgrenzen und entsprechende Garantien der übrigen Adapter bleiben
+  explizite Anforderungen.
 - Das Repository ist Quellcode für eine Bewerbungsreferenz. Es ist keine Freigabe für
   ein öffentlich erreichbares Deployment.
 
@@ -129,7 +130,7 @@ unterstützten Deploymentvarianten. Für die Bewerbungsreferenz gilt daher die i
 
 - atomarer, idempotenter Dispatch mit ausdrücklichen Erfolgs- und Fehlerergebnissen;
 - Größen-, Laufzeit- und Parallelitätsgrenzen an allen extern erreichbaren Pfaden;
-- verifizierte Transportverschlüsselung für alle credentialtragenden Adapter;
+- verifizierte Transportverschlüsselung für die übrigen credentialtragenden Adapter;
 - konsistente öffentliche Fehlerverträge ohne interne Pfade oder Exceptions;
 - Bereinigung der parallelen alten und neuen Persistenz-/Intake-Pfade;
 - Entscheidung über eine unterstützte Deploymentform oder Entfernung unvollständiger

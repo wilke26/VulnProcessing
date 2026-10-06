@@ -10,9 +10,9 @@ Import, Ticketvorbereitung, Dispatch, Batchstatus und Statistiken sind
 Managementfunktionen. Der ursprüngliche Stand besaß für diese Routen keine zentrale
 Authentifizierung oder serverseitige Mandantenautorisierung. Diese Teilentscheidung ist
 inzwischen durch fail-closed Bearer-Credentials mit Operations- und Tenant-Scopes
-umgesetzt. Weitere offene Grenzen
-betreffen verifizierte SMTP-TLS-Verbindungen, Ressourcenlimits, Dispatch-Idempotenz und
-öffentliche Fehlerdetails.
+umgesetzt. STARTTLS-Verbindungen des SMTP-Adapters prüfen inzwischen Zertifikatskette
+und Hostnamen. Weitere offene Grenzen betreffen Ressourcenlimits,
+Dispatch-Idempotenz und öffentliche Fehlerdetails.
 
 Der Quellcode darf als Referenz öffentlich sein. Daraus folgt jedoch keine Freigabe, den
 Service unverändert einem nicht vertrauenswürdigen Netzwerk auszusetzen.
@@ -48,6 +48,8 @@ Eigenschaften nachweisbar erfüllt:
   Tenant begrenzt.
 - Health und Version bleiben öffentlich; die Batch-Bestätigung behält ihre unabhängige
   HMAC-Authentifizierung.
+- Der SMTP-Adapter verwendet bei aktiviertem STARTTLS einen verifizierenden
+  System-`SSLContext`; Zertifikatsfehler verhindern Anmeldung und Versand.
 - Lokale Standardstarter binden den veröffentlichten Port an Loopback.
 - Die übrigen Anforderungen dieses ADRs bleiben offen; der Gesamtstatus ist deshalb
   weiterhin `Proposed`.
@@ -57,8 +59,8 @@ Eigenschaften nachweisbar erfüllt:
 - Standard-Sicherheitsreview des Stands `9ee6a51` vom 5. Oktober 2026.
 - `app/core/management_auth.py` implementiert die zentrale Management-Authentifizierung
   und serverseitige Operations- und Tenant-Scopes.
-- `app/services/email_service.py` besitzt noch keinen expliziten verifizierenden
-  `SSLContext`.
+- `app/services/email_service.py` übergibt einen mit `ssl.create_default_context()`
+  erzeugten, verifizierenden `SSLContext` an STARTTLS.
 - `app/services/batch_ticketing_service.py` führt externe Nebenwirkungen vor einem
   atomaren Dispatch-Claim aus.
 - `app/api/routes_tickets.py` gibt an mehreren Stellen interne Fehlerdetails zurück.

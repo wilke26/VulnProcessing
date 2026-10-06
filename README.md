@@ -113,6 +113,12 @@ Bearer-Credential auf dem Transportweg schützen.
 
 - `MANAGEMENT_CREDENTIALS` authentifiziert Management-Aufrufe und begrenzt sie auf
   konfigurierte Tenants und Operations-Scopes.
+- `SMTP_USE_TLS=true` aktiviert STARTTLS mit System-Truststore, verpflichtender
+  Zertifikatsprüfung und Hostnamenabgleich gegen `SMTP_HOST`. Private CAs müssen in den
+  Truststore der Laufzeit aufgenommen werden; bei aktiviertem TLS gibt es bewusst keinen
+  Schalter zum Abschalten der Zertifikatsprüfung. `SMTP_USE_TLS=false` behält den
+  bisherigen unverschlüsselten Modus ausschließlich für isolierte lokale
+  Entwicklungs-Relays bei.
 - `BATCH_CONFIRM_WEBHOOK_SECRET` ist für `POST /tickets/batch/confirm` erforderlich.
   Der Aufrufer signiert `<Unix-Timestamp>.<unveränderter Request-Body>` mit HMAC-SHA256
   und sendet das Ergebnis als `X-Webhook-Signature: sha256=<hex>` sowie den Timestamp
