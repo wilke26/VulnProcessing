@@ -37,11 +37,17 @@ def test_prioritization_returns_sorted(findings: list[Finding]) -> None:
     service = PrioritizationService(PriorityConfig())
     prioritized = service.prioritize_findings(findings)
 
-    # Gleiche Elemente (als Multiset) erhalten
-    assert sorted(prioritized, key=lambda f: (f.name, f.target, f.tenant, f.risk)) == sorted(
-        findings, key=lambda f: (f.name, f.target, f.tenant, f.risk)
+    # Gleiche Fachdaten (als Multiset) erhalten; nur der Score wird ergänzt.
+    original_data = sorted(
+        finding.model_dump_json(exclude={"priority_score"}) for finding in findings
     )
+    prioritized_data = sorted(
+        finding.model_dump_json(exclude={"priority_score"}) for finding in prioritized
+    )
+    assert prioritized_data == original_data
+    assert all(finding.priority_score is None for finding in findings)
 
     # Nicht-aufsteigende Reihenfolge nach Score
-    scores = [service.compute_priority(f) for f in prioritized]
+    scores = [finding.priority_score for finding in prioritized]
+    assert scores == [service.compute_priority(finding) for finding in prioritized]
     assert scores == sorted(scores, reverse=True)

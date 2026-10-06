@@ -57,6 +57,8 @@ def test_prioritize_by_risk():
 
     # Assert: Korrekte Reihenfolge (absteigend nach Gewicht)
     assert [f.name for f in sorted_list] == ["High", "Medium", "Low"]
+    assert [f.priority_score for f in sorted_list] == [100, 10, 0]
+    assert all(f.priority_score is None for f in [low, high, medium])
 
 
 def test_prioritize_by_product():

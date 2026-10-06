@@ -39,8 +39,16 @@ class PrioritizationService:
         return score
 
     def prioritize_findings(self, findings: list[Finding]) -> list[Finding]:
-        """Anreichern und Sortieren von Findings nach dem berechneten Score."""
-        return sorted(findings, key=self.compute_priority, reverse=True)
+        """Scores auf Kopien eintragen und Findings absteigend sortieren."""
+        prioritized = [
+            finding.model_copy(update={"priority_score": self.compute_priority(finding)})
+            for finding in findings
+        ]
+        return sorted(
+            prioritized,
+            key=lambda finding: finding.priority_score or 0,
+            reverse=True,
+        )
 
     def _best_cvss_score(self, finding: Finding) -> float | None:
         if not isinstance(finding, EnrichedFinding):

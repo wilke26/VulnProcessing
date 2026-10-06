@@ -140,7 +140,6 @@ class Settings(BaseSettings):
     MAX_CONCURRENT_MANAGEMENT_OPERATIONS: int = Field(default=4, gt=0, le=100)
 
     # --- Pfade ---
-    PRIORITIZATION_CONFIG_PATH: str = "config/prioritization.json"
     DATA_DIR: str = "./data"
     TEMPLATES_DIR: str = "./app/templates"
 

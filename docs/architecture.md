@@ -71,7 +71,9 @@ Schichtung.
 5. Die Ticketvorbereitung kann Findings priorisieren, über NVD anreichern und über
    N-Central auf bereits installierte Windows-Patches prüfen. Bei teilweise gepatchten
    Zielmengen bleibt das ursprüngliche `target` erhalten; der reduzierte Versandumfang
-   wird getrennt als `ticket_target` persistiert.
+   wird getrennt als `ticket_target` persistiert. Ticketvorbereitung und der schlanke
+   Intake-Helfer verwenden dafür dieselben Anreicherungs- und Priorisierungsservices;
+   deren Standardregeln sind typisiert in `PriorityConfig` definiert.
 6. Ein tenantbezogener Batch fasst Findings zusammen und übergibt sie an alle
    aktivierten Ticket-Clients.
 7. Der Dispatcher liefert ein Ergebnis pro Finding und Client. Nur wenn alle Versuche

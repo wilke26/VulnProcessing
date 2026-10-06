@@ -1,71 +1,59 @@
-"""
-Dieses Modul implementiert eine einfache Intake-Pipeline zur Verarbeitung und
-Priorisierung von Findings. Es kombiniert NVD-Anreicherung mit einer
-regelbasierten Priorisierung.
-"""
+"""Schlanker Intake-Helfer für NVD-Anreicherung und Priorisierung."""
 
-from app.connectors.nvd_client import NVDClient
-from app.models.findings import FindingsEnvelope
-from app.services.prioritizer import Prioritizer
+from collections.abc import Sequence
+from typing import TypedDict
 
-# Globale Instanzen der Dienste (mit Standardkonfiguration)
-prioritizer = Prioritizer("config/prioritization_rules.yaml")
-nvd_client = NVDClient()
+from app.core.priority_config import PriorityConfig
+from app.models.findings import Finding, FindingsEnvelope
+from app.services.enrichment_service import EnrichmentService
+from app.services.prioritization_service import PrioritizationService
 
 
-async def process_findings(input_data):
+class ProcessedFinding(TypedDict):
+    """Öffentliche Ergebnisstruktur des Intake-Helfers."""
+
+    name: str
+    risk: float
+    priority_score: int
+    target: str
+
+
+async def process_findings(
+    input_data: FindingsEnvelope | Sequence[Finding],
+    *,
+    enrichment_service: EnrichmentService | None = None,
+    prioritization_service: PrioritizationService | None = None,
+) -> list[ProcessedFinding]:
     """
     Verarbeitet eine Liste von Findings oder ein Findings-Envelope.
 
-    Der Prozess umfasst:
-    1. Normalisierung der Eingabedaten.
-    2. Optionale Anreicherung mit NVD-Daten (CVSS-Score).
-    3. Berechnung eines Prioritäts-Scores basierend auf definierten Regeln.
-    4. Zusammenstellung der Ergebnisse.
+    Der Helfer verwendet dieselben Services und dieselbe Standardkonfiguration wie
+    die Ticketvorbereitung. Abhängigkeiten können für Tests oder alternative
+    Composition Roots explizit übergeben werden.
 
     Args:
         input_data: Entweder ein FindingsEnvelope oder eine Liste von Finding-Objekten.
 
     Returns:
-        list: Eine Liste von Dictionaries mit den verarbeiteten und priorisierten Findings.
+        Priorisierte Ergebnisobjekte mit dem einheitlichen Feld ``priority_score``.
     """
-    # Schritt 1: Ermittlung des Findings-Arrays je nach Eingabemodell
     if isinstance(input_data, FindingsEnvelope):
-        findings = input_data.items
+        findings = list(input_data.items)
     else:
-        # Der Aufrufervertrag erlaubt neben dem Envelope direkt eine Finding-Liste.
-        findings = input_data
+        findings = list(input_data)
 
-    enriched_results = []
+    enricher = enrichment_service or EnrichmentService()
+    prioritizer = prioritization_service or PrioritizationService(PriorityConfig())
 
-    for finding in findings:
-        # Schritt 2: CVE-Daten abrufen; ein NVD-Score ersetzt den Risk-Score nur,
-        # wenn der Eingang keinen verwertbaren Wert enthält.
-        cve_id = getattr(finding, "name", None)
-        if cve_id and cve_id.startswith("CVE-"):
-            # Asynchroner Abruf
-            cve_data = await nvd_client.get_cve_data(cve_id)
+    enriched = await enricher.enrich_findings(findings)
+    prioritized = prioritizer.prioritize_findings(enriched)
 
-            if cve_data:
-                # CVSS-Score über die Hilfsmethode des Clients extrahieren
-                metrics = nvd_client.extract_cvss_metrics(cve_data)
-                cvss_score = metrics.get("baseScore", 0) if metrics else 0
-
-                # Falls das Finding keinen oder einen Risk-Score von 0 hat,
-                # wird der CVSS-Score genutzt
-                if getattr(finding, "risk", None) in [None, 0]:
-                    finding.risk = cvss_score
-
-        # Schritt 3: Prioritäts-Score berechnen
-        prio_score = prioritizer.prioritize(finding.model_dump())
-
-        # Schritt 4: Ergebnisstruktur aufbauen
-        result = {
-            "name": finding.name,
-            "risk": finding.risk,
-            "prio_score": prio_score,
-            "target": finding.target,
-        }
-        enriched_results.append(result)
-
-    return enriched_results
+    return [
+        ProcessedFinding(
+            name=finding.name,
+            risk=finding.risk,
+            priority_score=int(finding.priority_score or 0),
+            target=finding.target,
+        )
+        for finding in prioritized
+    ]
