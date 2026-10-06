@@ -18,6 +18,7 @@ from app.core.management_auth import (
     require_management_operation,
     require_tenant_access,
 )
+from app.core.resource_limits import RequestBodyTooLarge, enforce_management_capacity
 from app.models.findings import Finding, FindingsEnvelope, UnifiedFindingsInput
 from app.services.db_intake import save_findings
 
@@ -43,6 +44,7 @@ async def _read_upload_limited(file: UploadFile, max_bytes: int) -> bytes:
 
 @router.post(
     "/findings/import",
+    dependencies=[Depends(enforce_management_capacity)],
     openapi_extra={
         "requestBody": {
             "required": True,
@@ -84,11 +86,20 @@ async def import_findings(
                 raise HTTPException(status_code=422, detail="Multipart-Feld 'file' fehlt")
             contents = await _read_upload_limited(file, settings.MAX_IMPORT_BYTES)
         data = json.loads(contents.decode("utf-8"))
-    except HTTPException:
+    except (HTTPException, RequestBodyTooLarge):
         raise
     except Exception as e:
         # Fehler beim Lesen der Datei oder Parsen des JSON
         raise HTTPException(status_code=400, detail="Ungültige JSON-Eingabe") from e
+
+    raw_items = (
+        data if isinstance(data, list) else data.get("items") if isinstance(data, dict) else None
+    )
+    if isinstance(raw_items, list) and len(raw_items) > settings.MAX_FINDINGS_PER_IMPORT:
+        raise HTTPException(
+            status_code=413,
+            detail="Import überschreitet die maximale Anzahl von Findings",
+        )
 
     # Pydantic-Validierung gegen das UnifiedFindingsInput Modell
     try:

@@ -139,8 +139,21 @@ Bearer-Credential auf dem Transportweg schützen.
   ergänzt. Alte `pending`-Batches ohne Token können nicht sicher migriert werden und müssen
   vor dem Deployment abgeschlossen oder zurückgesetzt werden. `--check-only` beendet sich
   mit Status 1, wenn eine Migration oder manuelle Bereinigung erforderlich ist.
-- `MAX_IMPORT_BYTES` und `MAX_FINDINGS_PER_IMPORT` begrenzen JSON-Imports
-  (Standard: 10 MiB beziehungsweise 10.000 Findings).
+- `MAX_REQUEST_BYTES` begrenzt jeden eingehenden HTTP-Body bereits während des
+  Streamings (Standard: 11 MiB). `MAX_IMPORT_BYTES` und
+  `MAX_FINDINGS_PER_IMPORT` begrenzen zusätzlich die eigentliche JSON-Datei auf
+  10 MiB beziehungsweise 10.000 Findings.
+- `MAX_FINDINGS_PER_TICKET_OPERATION` begrenzt die aus der Datenbank geladene Menge vor
+  Enrichment oder Dispatch (Standard: 500). Überschreitungen liefern
+  `422 operation_item_limit_exceeded`, bevor externe Systeme aufgerufen werden.
+- `MAX_BATCH_CANDIDATES_PER_OPERATION` verhindert, dass eine einzelne Batch-Anfrage
+  rekursiv den gesamten Tenant-Bestand prüft (Standard: 50).
+- `MAX_CONCURRENT_MANAGEMENT_OPERATIONS` begrenzt teure Import-, Vorbereitungs- und
+  Dispatch-Aufrufe fail-fast pro Prozess (Standard: 4). Bei Auslastung folgt
+  `429 management_capacity_exceeded` mit `Retry-After`.
+- `SMTP_TIMEOUT_SECONDS`, `COPILOT_TIMEOUT_SECONDS`, `NCENTRAL_TIMEOUT` und
+  `NVD_TIMEOUT` begrenzen einzelne externe Aufrufe. Die REST-Ticketclients verwenden
+  weiterhin ihren expliziten 30-Sekunden-Timeout.
 
 Das vollständige Request-Schema, Signaturverfahren, Fehlercodes und ein ausführbarer
 Referenz-Client sind in [docs/06_Webhook_Bestaetigung.md](docs/06_Webhook_Bestaetigung.md)

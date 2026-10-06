@@ -241,3 +241,31 @@ def test_settings_reject_duplicate_management_credentials(duplicate: str) -> Non
                 },
             ],
         )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("MAX_REQUEST_BYTES", 0),
+        ("MAX_IMPORT_BYTES", 0),
+        ("MAX_FINDINGS_PER_IMPORT", 0),
+        ("MAX_FINDINGS_PER_TICKET_OPERATION", 0),
+        ("MAX_BATCH_CANDIDATES_PER_OPERATION", 0),
+        ("MAX_CONCURRENT_MANAGEMENT_OPERATIONS", 0),
+        ("SMTP_TIMEOUT_SECONDS", 0),
+        ("COPILOT_TIMEOUT_SECONDS", 0),
+        ("COPILOT_CONCURRENT_REQUESTS", 0),
+    ],
+)
+def test_settings_reject_nonpositive_resource_limits(field: str, value: int) -> None:
+    with pytest.raises(ValueError):
+        Settings(_env_file=None, **{field: value})
+
+
+def test_settings_reserve_request_space_for_multipart_overhead() -> None:
+    with pytest.raises(ValueError, match="MAX_REQUEST_BYTES"):
+        Settings(
+            _env_file=None,
+            MAX_REQUEST_BYTES=1024 + 64 * 1024 - 1,
+            MAX_IMPORT_BYTES=1024,
+        )

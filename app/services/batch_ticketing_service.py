@@ -49,6 +49,7 @@ class BatchTicketingService:
     def __init__(
         self,
         batch_size: int = 5,
+        max_candidates_per_operation: int = 50,
         db_session: Session | None = None,
         prep_service: TicketPreparationService | None = None,
     ):
@@ -61,6 +62,7 @@ class BatchTicketingService:
             db_session (Session, optional): Eine bestehende SQLAlchemy-Session (primär für Tests).
         """
         self.batch_size = batch_size
+        self.max_candidates_per_operation = max_candidates_per_operation
         self.prep_service = prep_service or build_ticket_preparation_service()
         self._db_session = db_session
 
@@ -98,7 +100,12 @@ class BatchTicketingService:
                 return result
 
     async def _create_batch_with_session(
-        self, session: Session, tenant_name: str, min_risk: float, target_system: str
+        self,
+        session: Session,
+        tenant_name: str,
+        min_risk: float,
+        target_system: str,
+        remaining_candidates: int | None = None,
     ) -> dict[str, Any] | None:
         """
         Interne Geschäftslogik zur Erstellung eines Batches innerhalb einer aktiven Session.
@@ -118,6 +125,14 @@ class BatchTicketingService:
         Returns:
             dict: Ergebnisbericht über die Batch-Erstellung.
         """
+        if remaining_candidates is None:
+            remaining_candidates = self.max_candidates_per_operation
+        if remaining_candidates <= 0:
+            return {
+                "status": "limit_reached",
+                "message": "Candidate limit reached before a dispatchable batch was found",
+            }
+
         # Repositories initialisieren
         tenant_repo = TenantRepository(session)
         finding_repo = FindingRepository(session)
@@ -145,7 +160,9 @@ class BatchTicketingService:
 
         # 3. Unverarbeitete Findings laden
         findings = finding_repo.get_unprocessed_findings(
-            tenant_id=tenant.id, limit=self.batch_size, min_risk=min_risk
+            tenant_id=tenant.id,
+            limit=min(self.batch_size, remaining_candidates),
+            min_risk=min_risk,
         )
 
         if not findings:
@@ -166,7 +183,11 @@ class BatchTicketingService:
 
             # Rekursiv nächsten Batch versuchen
             return await self._create_batch_with_session(
-                session, tenant_name, min_risk, target_system
+                session,
+                tenant_name,
+                min_risk,
+                target_system,
+                remaining_candidates=remaining_candidates - len(findings),
             )
 
         # 5. Batch erstellen
