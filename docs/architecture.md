@@ -95,8 +95,13 @@ Fehlerzustände wesentliche Anforderungen an eine spätere produktive Nutzung.
 
 - Die Batch-Bestätigung besitzt eine an den exakten Request-Body gebundene
   HMAC-Signatur und ein einmaliges, dispatchgebundenes Token.
-- Import- und Management-Routen besitzen im aktuellen Stand keine zentrale
-  anwendungseigene Authentifizierung oder serverseitige Mandantenautorisierung.
+- Import- und Management-Routen besitzen eine zentrale, standardmäßig ablehnende
+  Bearer-Authentifizierung. Serverseitig konfigurierte Credentials begrenzen sowohl
+  Operations als auch Tenant-Namen; globale Batch-IDs werden vor Lesen oder Dispatch
+  gegen den Tenant-Scope geprüft.
+- `/health` und `/version` bleiben bewusst öffentlich. Die externe Batch-Bestätigung
+  bleibt außerhalb der Management-Authentifizierung und verwendet ihre eigene HMAC-
+  und Dispatch-Token-Grenze.
 - Zugangsdaten und Zieladressen werden über Umgebungsvariablen beziehungsweise eine
   lokale, nicht einzucheckende `.env` konfiguriert.
 - Ausgehende Verbindungen verlassen die Vertrauensgrenze der Anwendung. TLS-Prüfung,
@@ -122,7 +127,6 @@ unterstützten Deploymentvarianten. Für die Bewerbungsreferenz gilt daher die i
 
 ## Bekannte Architekturarbeit
 
-- zentrale Authentifizierung und serverseitige Mandantenautorisierung;
 - atomarer, idempotenter Dispatch mit ausdrücklichen Erfolgs- und Fehlerergebnissen;
 - Größen-, Laufzeit- und Parallelitätsgrenzen an allen extern erreichbaren Pfaden;
 - verifizierte Transportverschlüsselung für alle credentialtragenden Adapter;

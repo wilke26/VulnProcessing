@@ -5,7 +5,7 @@ import hmac
 
 import pytest
 
-from app.core.config import Settings
+from app.core.config import ManagementCredential, Settings
 from app.core.security import (
     WebhookAuthenticationError,
     WebhookConfigurationError,
@@ -185,4 +185,59 @@ def test_settings_require_ncentral_config_when_filter_enabled() -> None:
             ENABLE_WINDOWS_PATCH_FILTER=True,
             NCENTRAL_API_URL="",
             NCENTRAL_API_KEY="",
+        )
+
+
+def test_settings_parse_management_credentials_from_environment(monkeypatch) -> None:
+    token = "environment-management-token-00000001"
+    monkeypatch.setenv(
+        "MANAGEMENT_CREDENTIALS",
+        (
+            '[{"subject":"portfolio-operator","token":"'
+            + token
+            + '","tenants":["Tenant A"],"operations":["batches:read"]}]'
+        ),
+    )
+
+    configured = Settings(_env_file=None)
+
+    assert configured.MANAGEMENT_CREDENTIALS[0].subject == "portfolio-operator"
+    assert configured.MANAGEMENT_CREDENTIALS[0].tenants == ["Tenant A"]
+    assert token not in repr(configured)
+    assert token not in repr(configured.model_dump())
+
+
+def test_management_credential_rejects_short_token() -> None:
+    with pytest.raises(ValueError, match="at least 32"):
+        ManagementCredential(
+            subject="operator",
+            token="too-short",
+            tenants=["Tenant A"],
+            operations=["batches:read"],
+        )
+
+
+@pytest.mark.parametrize("duplicate", ["subject", "token"])
+def test_settings_reject_duplicate_management_credentials(duplicate: str) -> None:
+    first_token = "first-management-token-000000000001"
+    second_token = first_token if duplicate == "token" else "second-management-token-00000000001"
+    second_subject = "first" if duplicate == "subject" else "second"
+
+    with pytest.raises(ValueError, match=f"{duplicate}s must be unique"):
+        Settings(
+            _env_file=None,
+            MANAGEMENT_CREDENTIALS=[
+                {
+                    "subject": "first",
+                    "token": first_token,
+                    "tenants": ["Tenant A"],
+                    "operations": ["batches:read"],
+                },
+                {
+                    "subject": second_subject,
+                    "token": second_token,
+                    "tenants": ["Tenant B"],
+                    "operations": ["batches:read"],
+                },
+            ],
         )

@@ -6,15 +6,23 @@ Es unterstützt den Import von JSON-Dateien im Rohformat oder im Envelope-Format
 import json
 from typing import cast
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import TypeAdapter, ValidationError
+from starlette.datastructures import UploadFile
 
 from app.core.config import settings
+from app.core.management_auth import (
+    FINDINGS_IMPORT,
+    ManagementPrincipal,
+    authenticate_management_request,
+    require_management_operation,
+    require_tenant_access,
+)
 from app.models.findings import Finding, FindingsEnvelope, UnifiedFindingsInput
 from app.services.db_intake import save_findings
 
 # Erstellen des APIRouters für Import-Endpunkte
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(authenticate_management_request)])
 
 # Pydantic TypeAdapter für die Validierung der Eingabedaten (UnifiedFindingsInput)
 # Unterstützt sowohl eine Liste von Findings als auch ein Envelope-Objekt.
@@ -33,14 +41,33 @@ async def _read_upload_limited(file: UploadFile, max_bytes: int) -> bytes:
     return b"".join(chunks)
 
 
-@router.post("/findings/import")
-async def import_findings(file: UploadFile = File(...)):
+@router.post(
+    "/findings/import",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "multipart/form-data": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["file"],
+                        "properties": {"file": {"type": "string", "format": "binary"}},
+                    }
+                }
+            },
+        }
+    },
+)
+async def import_findings(
+    request: Request,
+    principal: ManagementPrincipal = Depends(require_management_operation(FINDINGS_IMPORT)),
+):
     """
     Importiert eine JSON-Datei mit Findings (Roh-Array oder Envelope v1).
     Validiert die Struktur und persistiert die normalisierten Findings in der Datenbank.
 
     Args:
-        file (UploadFile): Die hochgeladene JSON-Datei.
+        request (Request): HTTP-Anfrage mit der JSON-Datei im Multipart-Feld ``file``.
 
     Returns:
         dict: Ein Dictionary mit der Anzahl der erfolgreich importierten Findings.
@@ -51,7 +78,11 @@ async def import_findings(file: UploadFile = File(...)):
 
     # Datei einlesen und JSON parsen
     try:
-        contents = await _read_upload_limited(file, settings.MAX_IMPORT_BYTES)
+        async with request.form(max_files=1, max_fields=0) as form:
+            file = form.get("file")
+            if not isinstance(file, UploadFile):
+                raise HTTPException(status_code=422, detail="Multipart-Feld 'file' fehlt")
+            contents = await _read_upload_limited(file, settings.MAX_IMPORT_BYTES)
         data = json.loads(contents.decode("utf-8"))
     except HTTPException:
         raise
@@ -79,6 +110,9 @@ async def import_findings(file: UploadFile = File(...)):
             status_code=413,
             detail="Import überschreitet die maximale Anzahl von Findings",
         )
+
+    for tenant_name in {finding.tenant for finding in findings}:
+        require_tenant_access(principal, tenant_name)
 
     # Speichern der Findings in der Datenbank über den Intake-Service
     count = save_findings(findings)

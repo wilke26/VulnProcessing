@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.api import routes_tickets
+from app.core.management_auth import ManagementPrincipal
 
 
 @pytest.mark.asyncio
@@ -28,6 +29,15 @@ async def test_dispatch_dry_run_does_not_call_dispatcher(monkeypatch, db_session
     )
 
     # Kein Finding vorhanden -> dispatched 0
-    result = await routes_tickets.dispatch_tickets(tenant_name=None, min_risk=None, dry_run=True)
+    result = await routes_tickets.dispatch_tickets(
+        tenant_name=None,
+        min_risk=None,
+        dry_run=True,
+        principal=ManagementPrincipal(
+            subject="test-admin",
+            tenants=frozenset({"*"}),
+            operations=frozenset({"*"}),
+        ),
+    )
     assert result["dispatched"] == 0
     assert result["dry_run"] is True

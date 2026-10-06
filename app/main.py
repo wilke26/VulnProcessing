@@ -83,7 +83,14 @@ def create_app() -> FastAPI:
     Returns:
         FastAPI: Die konfigurierte Anwendung mit allen registrierten Routern.
     """
-    app = FastAPI(title="VulnProcessing", lifespan=lifespan)
+    documentation_url = "/docs" if settings.DEBUG else None
+    app = FastAPI(
+        title="VulnProcessing",
+        lifespan=lifespan,
+        docs_url=documentation_url,
+        redoc_url="/redoc" if settings.DEBUG else None,
+        openapi_url="/openapi.json" if settings.DEBUG else None,
+    )
 
     # Router für die verschiedenen API-Module registrieren
     app.include_router(health_router)

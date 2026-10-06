@@ -6,8 +6,28 @@ Pydantic Settings. Es lädt Konfigurationswerte aus Umgebungsvariablen oder eine
 
 from __future__ import annotations
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ManagementCredential(BaseModel):
+    """Opaque management credential with server-side authorization scopes."""
+
+    subject: str = Field(min_length=1)
+    token: SecretStr
+    tenants: list[str] = Field(min_length=1)
+    operations: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_scopes(self) -> ManagementCredential:
+        token = self.token.get_secret_value()
+        if len(token) < 32:
+            raise ValueError("Management tokens must contain at least 32 characters")
+        if any(not value.strip() for value in self.tenants):
+            raise ValueError("Management tenant scopes must not be empty")
+        if any(not value.strip() for value in self.operations):
+            raise ValueError("Management operation scopes must not be empty")
+        return self
 
 
 class Settings(BaseSettings):
@@ -33,6 +53,11 @@ class Settings(BaseSettings):
     APP_NAME: str = "VulnProcessing"
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
+
+    # --- Management API ---
+    # Opaque bearer credentials with server-side tenant and operation scopes.
+    # Empty configuration intentionally disables all management routes.
+    MANAGEMENT_CREDENTIALS: list[ManagementCredential] = Field(default_factory=list)
 
     # --- Copilot / AI Integration ---
     # Gibt an, ob die Copilot-Integration aktiviert ist
@@ -214,6 +239,17 @@ class Settings(BaseSettings):
                 "BATCH_CONFIRM_WEBHOOK_CLOCK_SKEW_SECONDS muss kleiner als "
                 "BATCH_CONFIRM_WEBHOOK_MAX_AGE_SECONDS sein."
             )
+
+        subjects: set[str] = set()
+        tokens: set[str] = set()
+        for credential in self.MANAGEMENT_CREDENTIALS:
+            token = credential.token.get_secret_value()
+            if credential.subject in subjects:
+                raise ValueError("Management credential subjects must be unique")
+            if token in tokens:
+                raise ValueError("Management credential tokens must be unique")
+            subjects.add(credential.subject)
+            tokens.add(token)
 
         return self
 

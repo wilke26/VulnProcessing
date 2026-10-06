@@ -7,8 +7,10 @@
 ## Kontext
 
 Import, Ticketvorbereitung, Dispatch, Batchstatus und Statistiken sind
-Managementfunktionen. Im heutigen Stand besitzen diese Routen keine zentrale
-Authentifizierung oder serverseitige Mandantenautorisierung. Weitere offene Grenzen
+Managementfunktionen. Der ursprüngliche Stand besaß für diese Routen keine zentrale
+Authentifizierung oder serverseitige Mandantenautorisierung. Diese Teilentscheidung ist
+inzwischen durch fail-closed Bearer-Credentials mit Operations- und Tenant-Scopes
+umgesetzt. Weitere offene Grenzen
 betreffen verifizierte SMTP-TLS-Verbindungen, Ressourcenlimits, Dispatch-Idempotenz und
 öffentliche Fehlerdetails.
 
@@ -40,10 +42,21 @@ Eigenschaften nachweisbar erfüllt:
   Produktionspfade beschrieben werden.
 - Dieses ADR wechselt erst nach Implementierung und Verifikation auf `Accepted`.
 
+## Umsetzungsstand
+
+- Management-Routen sind zentral authentifiziert und serverseitig nach Operation und
+  Tenant begrenzt.
+- Health und Version bleiben öffentlich; die Batch-Bestätigung behält ihre unabhängige
+  HMAC-Authentifizierung.
+- Lokale Standardstarter binden den veröffentlichten Port an Loopback.
+- Die übrigen Anforderungen dieses ADRs bleiben offen; der Gesamtstatus ist deshalb
+  weiterhin `Proposed`.
+
 ## Evidenz
 
 - Standard-Sicherheitsreview des Stands `9ee6a51` vom 5. Oktober 2026.
-- `app/main.py` bindet die Management-Router ohne zentrale Authentifizierung ein.
+- `app/core/management_auth.py` implementiert die zentrale Management-Authentifizierung
+  und serverseitige Operations- und Tenant-Scopes.
 - `app/services/email_service.py` besitzt noch keinen expliziten verifizierenden
   `SSLContext`.
 - `app/services/batch_ticketing_service.py` führt externe Nebenwirkungen vor einem

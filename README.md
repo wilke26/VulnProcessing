@@ -74,8 +74,45 @@ API:
 - `POST /tickets/dispatch` dispatcht offene Findings an konfigurierte Clients.
 - `POST /tickets/batch/{id}/dispatch` dispatcht einen vorbereiteten Batch.
 
+### Management-Authentifizierung
+
+Alle Import-, Ticket- und Batch-Management-Routen benötigen ein Bearer-Credential.
+`/health` und `/version` bleiben öffentlich; `/tickets/batch/confirm` verwendet
+weiterhin ausschließlich die unten dokumentierte Webhook-Authentifizierung. Ohne
+`MANAGEMENT_CREDENTIALS` sind Management-Routen standardmäßig deaktiviert und antworten
+mit `503 management_auth_unavailable`.
+
+Die Credentials werden als JSON-Liste über die Deploymentumgebung konfiguriert. Tokens
+müssen mindestens 32 Zeichen lang sein und gehören nicht in versionierte Dateien:
+
+```text
+MANAGEMENT_CREDENTIALS=[{"subject":"portfolio-admin","token":"<secret>","tenants":["*"],"operations":["*"]}]
+Authorization: Bearer <secret>
+```
+
+Ein Token kann beispielsweise lokal mit `python -c "import secrets;
+print(secrets.token_urlsafe(32))"` erzeugt werden. Statt `*` können Tenant-Namen und
+Operations-Scopes explizit freigegeben werden:
+
+- `findings:import`
+- `tickets:create`
+- `tickets:dispatch`
+- `batches:create`
+- `batches:dispatch`
+- `batches:read`
+
+Tenant-Scope und Operation werden serverseitig aus dem Credential abgeleitet. Ein
+weggelassener Tenant-Filter erweitert die Berechtigung nicht; die Abfrage bleibt auf
+die freigegebenen Tenants begrenzt. Fehlende oder ungültige Tokens ergeben `401`, eine
+fehlende Operation oder ein nicht freigegebener expliziter Tenant `403`. Nicht
+freigegebene Batch-IDs werden wie unbekannte IDs mit `404` beantwortet. Außerhalb eines
+lokalen Loopback-Setups muss eine vorgeschaltete, verifizierte HTTPS-Verbindung das
+Bearer-Credential auf dem Transportweg schützen.
+
 ## Sicherheitseinstellungen
 
+- `MANAGEMENT_CREDENTIALS` authentifiziert Management-Aufrufe und begrenzt sie auf
+  konfigurierte Tenants und Operations-Scopes.
 - `BATCH_CONFIRM_WEBHOOK_SECRET` ist für `POST /tickets/batch/confirm` erforderlich.
   Der Aufrufer signiert `<Unix-Timestamp>.<unveränderter Request-Body>` mit HMAC-SHA256
   und sendet das Ergebnis als `X-Webhook-Signature: sha256=<hex>` sowie den Timestamp
