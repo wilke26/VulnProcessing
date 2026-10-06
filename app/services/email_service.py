@@ -11,6 +11,7 @@ Er unterstützt:
 from __future__ import annotations
 
 import smtplib
+import ssl
 from dataclasses import dataclass
 from email import policy
 from email.mime.multipart import MIMEMultipart
@@ -93,11 +94,12 @@ class EmailService:
         try:
             # MIME-Nachricht generieren
             msg = self._build_message(ticket)
+            tls_context = ssl.create_default_context() if self.use_tls else None
 
             # SMTP-Verbindung aufbauen und Nachricht senden
             with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-                if self.use_tls:
-                    server.starttls()
+                if tls_context is not None:
+                    server.starttls(context=tls_context)
 
                 server.login(self.smtp_user, self.smtp_password)
                 server.send_message(msg)
