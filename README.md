@@ -78,6 +78,10 @@ Ein Dispatch gilt nur als erfolgreich, wenn jedes Finding an jeden aktivierten C
 übertragen wurde. Batches ohne erfolgreichen Versand werden nicht mehr auf `pending`
 gesetzt; Teilerfolge erhalten den terminalen Status `partially_failed`, um bereits
 erzeugte externe Tickets nicht durch eine automatische Wiederholung zu duplizieren.
+Vor dem externen Aufruf wird ein Batch atomar als `dispatching` beansprucht. Dadurch
+kann nur ein konkurrierender Aufruf den Versand ausführen. Ein unerwarteter Abbruch mit
+unklarem externem Ergebnis bleibt in `dispatching` und muss vor einem erneuten Versand
+manuell abgeglichen werden.
 
 ### Management-Authentifizierung
 

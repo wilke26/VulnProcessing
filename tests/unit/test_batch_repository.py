@@ -39,8 +39,7 @@ class TestTicketBatchRepository:
 
     def test_get_next_pending_batch_returns_oldest_pending(self, db_session):
         """
-        Stellt sicher, dass der älteste Batch mit dem Status 'pending' oder
-        'created' zurückgegeben wird.
+        Stellt sicher, dass der älteste offene Batch zurückgegeben wird.
         """
         # Arrange
         tenant = Tenant(name="TestTenant")
@@ -66,8 +65,22 @@ class TestTicketBatchRepository:
         next_batch = repo.get_next_pending_batch(tenant.id)
 
         # Assert: Es sollte batch2 (der älteste nicht-abgeschlossene Batch) sein
-        assert next_batch is not None, "Es wurde kein pending/created Batch gefunden."
+        assert next_batch is not None, "Es wurde kein offener Batch gefunden."
         assert next_batch.batch_number == 2
+
+    def test_dispatching_batch_still_blocks_next_batch(self, db_session):
+        tenant = Tenant(name="DispatchingTenant")
+        db_session.add(tenant)
+        db_session.flush()
+        batch = TicketBatch(
+            tenant_id=tenant.id,
+            batch_number=1,
+            status=TicketBatchStatus.DISPATCHING.value,
+        )
+        db_session.add(batch)
+        db_session.commit()
+
+        assert TicketBatchRepository(db_session).get_next_pending_batch(tenant.id) == batch
 
     def test_mark_batch_failed_resets_findings(self, db_session):
         """

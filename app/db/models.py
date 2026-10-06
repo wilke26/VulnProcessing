@@ -88,6 +88,7 @@ class TicketBatchStatus(enum.StrEnum):
     """
 
     CREATED = "created"
+    DISPATCHING = "dispatching"
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"

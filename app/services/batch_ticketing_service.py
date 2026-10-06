@@ -254,20 +254,31 @@ class BatchTicketingService:
         batch_repo = TicketBatchRepository(session)
         FindingRepository(session)
 
-        batch = batch_repo.get_batch_by_id(batch_id)
-        if not batch:
-            return {"success": False, "error": "Batch not found"}
-
-        if batch.status != TicketBatchStatus.CREATED.value:
+        confirmation_token, confirmation_token_hash = issue_dispatch_confirmation_token()
+        if not batch_repo.claim_batch_for_dispatch(batch_id):
+            session.expire_all()
+            batch = batch_repo.get_batch_by_id(batch_id)
+            if not batch:
+                session.rollback()
+                return {"success": False, "error": "Batch not found"}
+            current_status = batch.status
+            session.rollback()
             return {
                 "success": False,
-                "error": f"Batch has status '{batch.status}', expected 'created'",
+                "error": f"Batch has status '{current_status}', expected 'created'",
             }
 
-        findings = batch.findings
+        # Der Claim muss vor externen Nebenwirkungen für konkurrierende Sessions
+        # sichtbar sein. Ein Abbruch danach bleibt bewusst als unklarer Dispatch
+        # gesperrt, statt möglicherweise bereits erstellte Tickets zu duplizieren.
+        session.commit()
+        session.expire_all()
+        batch = batch_repo.get_batch_by_id(batch_id)
+        if batch is None:  # Defensive guard; the claimed row should still exist.
+            return {"success": False, "error": "Batch not found after dispatch claim"}
+        findings = list(batch.findings)
 
         try:
-            confirmation_token, confirmation_token_hash = issue_dispatch_confirmation_token()
             dispatch_result = await dispatcher.dispatch(
                 findings,
                 batch_id=batch.id,
@@ -307,7 +318,7 @@ class BatchTicketingService:
             batch.external_batch_id = f"DISPATCH-{batch.id}"
             batch.sent_at = datetime.now(UTC)
             batch.confirmation_token_hash = confirmation_token_hash
-            session.flush()
+            session.commit()
 
             return {
                 "success": True,
@@ -321,9 +332,18 @@ class BatchTicketingService:
 
         except Exception as exc:
             logger.exception("Fehler beim Dispatching des Batches: %s", exc)
-            batch_repo.mark_batch_failed(batch, str(exc))
+            if not session.is_active:
+                session.rollback()
+            batch = batch_repo.get_batch_by_id(batch_id)
+            if batch is not None:
+                batch_repo.mark_batch_dispatch_uncertain(batch, str(exc))
             session.commit()
-            return {"success": False, "error": str(exc)}
+            return {
+                "success": False,
+                "error": str(exc),
+                "batch_id": batch_id,
+                "batch_status": TicketBatchStatus.DISPATCHING.value,
+            }
 
     async def _send_batch_with_session(
         self, session: Session, batch_id: int, ticket_connector: Any

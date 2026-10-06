@@ -10,7 +10,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Query, Session
 
 from app.db import models as orm_models
@@ -262,6 +262,7 @@ class TicketBatchRepository:
                 TicketBatch.status.in_(
                     [
                         TicketBatchStatus.CREATED.value,
+                        TicketBatchStatus.DISPATCHING.value,
                         TicketBatchStatus.PENDING.value,
                     ]
                 ),
@@ -269,6 +270,25 @@ class TicketBatchRepository:
             .order_by(TicketBatch.batch_number.asc())
             .limit(1)
         ).scalar_one_or_none()
+
+    def claim_batch_for_dispatch(self, batch_id: int) -> bool:
+        """Atomically claim a created batch before external side effects begin."""
+        result = self.session.execute(
+            update(TicketBatch)
+            .where(
+                TicketBatch.id == batch_id,
+                TicketBatch.status == TicketBatchStatus.CREATED.value,
+            )
+            .values(status=TicketBatchStatus.DISPATCHING.value)
+            .execution_options(synchronize_session=False)
+        )
+        return result.rowcount == 1
+
+    def mark_batch_dispatch_uncertain(self, batch: TicketBatch, error_message: str) -> None:
+        """Keep an ambiguously interrupted dispatch blocked for manual reconciliation."""
+        batch.status = TicketBatchStatus.DISPATCHING.value
+        batch.last_error = error_message
+        batch.confirmation_token_hash = None
 
     def mark_batch_sent(
         self,
