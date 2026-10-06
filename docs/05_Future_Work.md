@@ -3,7 +3,8 @@
 Die aktuelle Lösung bildet den stabilen Grundprozess zur Validierung und Weiterverarbeitung der Findings ab. Perspektivisch kann die Architektur erweitert werden um:
 
 * asynchrone Verarbeitung durch einen separaten Worker (Celery / Queue Trigger)
-* dynamische Priorisierung (z. B. nach CVSS, Asset-Context oder Kunde)
+* Erweiterung der vorhandenen CVSS- und Produktregeln um dynamischen Asset- und
+  Kundenkontext
 * Container-basierte Bereitstellung in Azure Container Apps für Lastspitzen
 * Microsoft Sentinel / SIEM Integration als Datenverbraucher
 
