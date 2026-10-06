@@ -91,6 +91,10 @@ weiterhin ausschließlich die unten dokumentierte Webhook-Authentifizierung. Ohn
 `MANAGEMENT_CREDENTIALS` sind Management-Routen standardmäßig deaktiviert und antworten
 mit `503 management_auth_unavailable`.
 
+Die Batch-Erstellung prüft zuerst den serverseitigen Tenant-Scope. Ein nicht erlaubter
+Tenant liefert `403 tenant_forbidden`; ein erlaubter, aber unbekannter Tenant liefert
+anschließend `404 tenant_not_found`, ohne interne Datenbankdetails offenzulegen.
+
 Die Credentials werden als JSON-Liste über die Deploymentumgebung konfiguriert. Tokens
 müssen mindestens 32 Zeichen lang sein und gehören nicht in versionierte Dateien:
 

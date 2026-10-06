@@ -304,9 +304,11 @@ async def create_ticket_batch(
             target_system=target_system,
         )
 
-        if not result:
-            # Defensive Absicherung für einen unerwartet leeren Service-Rückgabewert.
-            raise HTTPException(status_code=404, detail="Mandant nicht gefunden")
+        if result.get("code") == "tenant_not_found":
+            raise HTTPException(
+                status_code=404,
+                detail=error_detail("tenant_not_found", "Mandant nicht gefunden"),
+            )
 
         result.setdefault("error", None)
         result.setdefault("code", None)

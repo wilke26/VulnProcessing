@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 import app.api.routes_tickets as routes_tickets
 from app.core.config import ManagementCredential, settings
 from app.core.management_auth import (
+    BATCHES_CREATE,
     BATCHES_DISPATCH,
     BATCHES_READ,
     FINDINGS_IMPORT,
@@ -124,6 +125,33 @@ def test_operation_scope_is_enforced(monkeypatch, real_management_auth) -> None:
 
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "management_operation_forbidden"
+
+
+def test_unknown_allowed_tenant_is_404_but_out_of_scope_tenant_remains_403(
+    db_session, monkeypatch, real_management_auth
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "MANAGEMENT_CREDENTIALS",
+        [_credential(TOKEN_A, tenants=["MissingTenant"], operations=[BATCHES_CREATE])],
+    )
+    client = TestClient(app)
+
+    missing = client.post(
+        "/tickets/batch/create",
+        params={"tenant_name": "MissingTenant"},
+        headers=_headers(TOKEN_A),
+    )
+    outside_scope = client.post(
+        "/tickets/batch/create",
+        params={"tenant_name": "OtherTenant"},
+        headers=_headers(TOKEN_A),
+    )
+
+    assert missing.status_code == 404
+    assert missing.json()["detail"]["code"] == "tenant_not_found"
+    assert outside_scope.status_code == 403
+    assert outside_scope.json()["detail"]["code"] == "tenant_forbidden"
 
 
 def test_unauthenticated_import_is_rejected_before_multipart_parsing(

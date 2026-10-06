@@ -60,15 +60,14 @@ class TicketWorkflowOrchestrator:
                 min_risk=min_risk,
             )
 
-            # Typ-Narrowing: ab hier ist result ein Dict[str, Any]
-            if result is None:
-                logger.info(
-                    f"Kein Resultat von create_next_batch (Tenant '{tenant_name}' "
-                    "nicht gefunden oder Fehler)."
+            status = str(result.get("status") or "")
+
+            if status == "error":
+                logger.warning(
+                    "Batch-Erstellung abgebrochen (Code: %s)",
+                    result.get("code") or "unknown",
                 )
                 break
-
-            status = str(result.get("status") or "")
 
             if status == "no_findings":
                 logger.info("Keine weiteren Findings zu verarbeiten")

@@ -21,6 +21,18 @@ class TestBatchTicketingService:
     """
 
     @pytest.mark.asyncio
+    async def test_create_next_batch_identifies_unknown_tenant(self, db_session):
+        service = build_batch_ticketing_service(batch_size=5, db_session=db_session)
+
+        result = await service.create_next_batch(tenant_name="MissingTenant")
+
+        assert result == {
+            "status": "error",
+            "code": "tenant_not_found",
+            "message": "Tenant not found",
+        }
+
+    @pytest.mark.asyncio
     async def test_create_next_batch_creates_batch_with_max_5_findings(self, db_session):
         """
         Stellt sicher, dass bei der Batch-Erstellung maximal 5 Findings berücksichtigt werden.

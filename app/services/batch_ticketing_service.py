@@ -69,7 +69,7 @@ class BatchTicketingService:
 
     async def create_next_batch(
         self, tenant_name: str, min_risk: float = 0.0, target_system: str = "mks"
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any]:
         """
         Ermittelt offene Findings für einen Tenant und erstellt daraus den nächsten Batch.
 
@@ -82,7 +82,7 @@ class BatchTicketingService:
             target_system (str): Das Zielsystem für die Ticketerstellung.
 
         Returns:
-            dict | None: Metadaten des erstellten Batches oder Fehlermeldung/Status.
+            Metadaten des erstellten Batches oder ein fachlicher Status mit stabilem Code.
         """
         if self._db_session is not None:
             session: Session = self._db_session
@@ -106,7 +106,7 @@ class BatchTicketingService:
         min_risk: float,
         target_system: str,
         remaining_candidates: int | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any]:
         """
         Interne Geschäftslogik zur Erstellung eines Batches innerhalb einer aktiven Session.
 
@@ -142,7 +142,11 @@ class BatchTicketingService:
         tenant = tenant_repo.get_by_name(tenant_name)
         if not tenant:
             logger.error(f"Tenant '{tenant_name}' nicht gefunden")
-            return {"status": "error", "message": f"Tenant '{tenant_name}' not found"}
+            return {
+                "status": "error",
+                "code": "tenant_not_found",
+                "message": "Tenant not found",
+            }
 
         # Pro Tenant darf nur ein noch nicht abschließend behandelter Batch existieren.
         pending_batch = batch_repo.get_next_pending_batch(tenant.id)
