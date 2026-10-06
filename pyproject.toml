@@ -1,0 +1,127 @@
+[project]
+name = "vulnprocessing"
+version = "0.1.0"
+description = "Automatisierte Konsolidierung, Priorisierung und Ticket-Erstellung von Schwachstellen-Daten"
+authors = [{ name = "Udo Wilke" }]
+readme = "README.md"
+requires-python = ">=3.12"
+
+dependencies = [
+    "python-dotenv>=1.0.1,<2.0.0",
+    "pandas>=2.3.3,<3.0.0",
+    "fastapi>=0.121.0,<0.122.0",
+    "python-multipart>=0.0.22,<0.1.0",
+    "pydantic>=2.12.4,<3.0.0",
+    "sqlalchemy (>=2.0.44,<3.0.0)",
+    "uvicorn (>=0.38.0,<0.39.0)",
+    "pydantic-settings (>=2.12.0,<3.0.0)",
+    "httpx (>=0.28.1,<0.29.0)",  # <- für Copilot Calls
+    "cachetools (>=6.2.2,<7.0.0)",
+    "requests (>=2.32.5,<3.0.0)",
+    "urllib3 (>=2.6.3,<3.0.0)",
+    "alembic (>=1.17.2,<2.0.0)",
+    "apscheduler (>=3.11.0,<4.0.0)",
+	"structlog (>=25.1.0,<26.0.0)",
+    "tenacity (>=9.0.0,<10.0.0)"
+]
+
+[project.scripts]
+export-schema = "scripts.export_schema:__main__"
+confirm-batch = "scripts.confirm_batch_webhook:main"
+
+[tool.poetry]
+packages = [{ include = "app" },
+            { include = "config" },
+            { include = "data" },
+            { include = "deploy" },
+            { include = "schema" },
+            {include = "scripts"},
+            { include = "tests" }
+            ]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.2"
+pytest-cov = "^7.0.0"
+pytest-asyncio = "^1.3.0"
+pre-commit = "^4.5.0"
+black = "^25.11.0"
+ruff = "^0.14.8"
+mkdocs-material = "^9.7.0"
+mkdocstrings = {extras = ["python"], version = "^1.0.0"}
+hypothesis = "^6.125.0"
+
+[tool.poetry.group.docs.dependencies]
+mkdocs = "^1.6.1"
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+# Optional: welche Dateien Black formatieren soll
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | venv
+  | build
+  | dist
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Ignoriere typische Verzeichnisse
+exclude = [
+  ".git",
+  ".venv",
+  "venv",
+  "__pycache__",
+  "build",
+  "dist",
+  "migrations",
+]
+
+[tool.ruff.lint]
+# Basis: Fehler + Flake8-Basics + isort-Importregeln
+select = [
+  "E",  # pycodestyle errors
+  "F",  # pyflakes
+  "I",  # isort
+  "B",  # flake8-bugbear
+  "UP", # pyupgrade
+]
+# Black-kompatible Ignorierungen (E203, W503) + ggf. Zeilenlänge, wenn du die Black überlässt
+ignore = [
+  "E203",
+  "B008", # FastAPI Depends/File calls in defaults
+]
+
+# Spezielle Regeln für Tests (weniger streng)
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*" = ["S101", "B017", "F811"]  # assert, blind Exception, redefined-while-unused in tests
+
+[tool.ruff.format]
+# Stil hier Black-kompatibel halten:
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra"
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+    "ignore::DeprecationWarning:sqlalchemy",
+    "ignore::DeprecationWarning:sqlalchemy.sql.schema",
+]
+
+markers = [
+    "no_db: skip database setup for lightweight unit tests",
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,34 @@
+site_name: VulnProcessing Entwicklerdokumentation
+site_description: Dokumentation des VulnProcessing‑Projekts (IT‑Ausbildungsprojekt)
+site_author: Udo Wilke
+site_language: de
+nav:
+  - Startseite: index.md
+  - Datenmodell: data-models.md
+  - Services: services.md
+  - Repositories: repositories.md
+  - Connectors: connectors.md
+  - API‑Referenz:
+      - Modelle: api/models.md
+      - Services: api/services.md
+      - Connectors: api/connectors.md
+      - Tickets: api/tickets.md
+      - Fehlerformate: api/errors.md
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          setup_commands:
+            - import sys
+            - sys.path.append('..')
+          options:
+            separate_signature: true
+            show_signature_annotations: true
+            show_source: false
+theme:
+  name: material
+  language: de
+  features:
+    - navigation.expand
+    - navigation.sections

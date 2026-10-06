@@ -1,0 +1,41 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+.hypothesis/
+
+# Reports / generierte Artefakte (lokal, nicht versionieren)
+ruff_*.txt
+test_results.txt
+
+# Lokaler Laufzeitzustand (an jedem konfigurierten SQLite-Pfad)
+*.sqlite
+*.sqlite-*
+*.sqlite.*
+*.sqlite3
+*.sqlite3-*
+*.sqlite3.*
+*.db
+*.db-*
+*.db.*
+*.db3
+*.db3-*
+*.db3.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.[eE][nN][vV]
+.[eE][nN][vV].*
+.[eE][nN][vV]~
+!.[eE][nN][vV].[eE][xX][aA][mM][pP][lL][eE]
+
+# IDE (lokale und benutzerspezifische Metadaten)
+.idea/
+.vscode/
+*.iml

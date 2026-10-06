@@ -1,0 +1,12 @@
+# Einheitliche Zeilenenden (LF) für den gesamten Bestand
+* text=auto eol=lf
+
+# Binärdateien explizit ausschließen (kein Text-Handling)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.db binary
+*.sqlite binary

@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        uses: abatilo/actions-poetry@v2
+        with:
+          poetry-version: "2.2.1"
+
+      - name: Install deps
+        run: poetry install --no-interaction --no-root
+
+      - name: Check public snapshot hygiene
+        run: poetry run python scripts/check_public_snapshot.py
+
+      - name: Lint (ruff)
+        run: poetry run ruff check .
+
+      - name: Format check (black)
+        run: poetry run black --check .
+
+      - name: Tests
+        run: poetry run pytest --maxfail=1 -q
+
+      - name: Export Data Contract (JSON Schema)
+        run: poetry run python -m scripts.export_schema
+
+      - name: Upload schema artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: schema-artifacts
+          path: schema/*.json
+
+      # Optional: Docker Build (lokal, ohne Push)
+      # - name: Build API image
+      #   run: docker build -f deploy/docker/Dockerfile.app -t vulnp/api:ci .
+
+      # - name: Build Worker image
+      #   run: docker build -f deploy/docker/Dockerfile.worker -t vulnp/worker:ci .
