@@ -25,6 +25,8 @@ Clients und injizieren sie in Ticketvorbereitung und Dispatcher.
 - Der Dispatcher liefert ein strukturiertes Ergebnis pro Finding und Client. Adapterfehler
   werden dadurch trotz lokaler Protokollierung für den Batch-Lebenszyklus sichtbar.
 - Mehrere aktivierte Clients bedeuten mehrere externe Nebenwirkungen pro Finding.
+- N-Central-Filterung überschreibt nicht den ursprünglichen Scanbefund. Ein reduzierter
+  Hostumfang wird separat als `ticket_target` gespeichert und vom Dispatcher bevorzugt.
 
 ## Historische Evidenz
 

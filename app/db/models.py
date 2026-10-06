@@ -299,6 +299,7 @@ class Finding(Base):
     risk: Mapped[float] = mapped_column(Float, nullable=False)
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     target: Mapped[str] = mapped_column(String, nullable=False)
+    ticket_target: Mapped[str | None] = mapped_column(String, nullable=True)
     windows_version_hint: Mapped[str] = mapped_column(String, default="")
     extended_solution_json: Mapped[str] = mapped_column(Text, nullable=False)
     priority_score: Mapped[float | None] = mapped_column(Float, nullable=True)

@@ -69,7 +69,9 @@ Schichtung.
    SQLite-Datei konfigurieren; andere SQLAlchemy-Dialekte werden von der aktuellen
    Engine-Initialisierung nicht unterstützt.
 5. Die Ticketvorbereitung kann Findings priorisieren, über NVD anreichern und über
-   N-Central auf bereits installierte Windows-Patches prüfen.
+   N-Central auf bereits installierte Windows-Patches prüfen. Bei teilweise gepatchten
+   Zielmengen bleibt das ursprüngliche `target` erhalten; der reduzierte Versandumfang
+   wird getrennt als `ticket_target` persistiert.
 6. Ein tenantbezogener Batch fasst Findings zusammen und übergibt sie an alle
    aktivierten Ticket-Clients.
 7. Der Dispatcher liefert ein Ergebnis pro Finding und Client. Nur wenn alle Versuche

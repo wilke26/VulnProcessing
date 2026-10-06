@@ -130,6 +130,7 @@ def upgrade() -> None:
         sa.Column("risk", sa.Float(), nullable=False),
         sa.Column("amount", sa.Integer(), nullable=False),
         sa.Column("target", sa.String(), nullable=False),
+        sa.Column("ticket_target", sa.String(), nullable=True),
         sa.Column("windows_version_hint", sa.String(), nullable=True, server_default=sa.text("''")),
         sa.Column("extended_solution_json", sa.Text(), nullable=False),
         sa.Column("priority_score", sa.Float(), nullable=True),

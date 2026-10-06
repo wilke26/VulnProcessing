@@ -16,6 +16,8 @@ class DummyFinding:
     name: str
     tenant: str
     priority_score: float
+    target: str = "original-host"
+    ticket_target: str | None = None
 
 
 class DummyRemediationService:
@@ -97,6 +99,29 @@ async def test_dispatcher_reports_missing_clients():
     assert result.no_clients is True
     assert result.succeeded is False
     assert result.attempts == ()
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_prefers_filtered_ticket_target():
+    client = DummyClient()
+    dispatcher = TicketDispatcher(
+        settings=Settings(),
+        remediation_service=DummyRemediationService(),
+        clients=[client],
+    )
+    finding = DummyFinding(
+        id=2,
+        name="Finding B",
+        tenant="TenantA",
+        priority_score=70.0,
+        target="server01, server02",
+        ticket_target="server02",
+    )
+
+    await dispatcher.dispatch([finding])
+
+    assert "Target: server02" in client.calls[0]["title"]
+    assert "server01" not in client.calls[0]["title"]
 
 
 @pytest.mark.asyncio
