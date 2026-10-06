@@ -305,7 +305,7 @@ async def create_ticket_batch(
         )
 
         if not result:
-            # Falls kein Tenant gefunden wurde (der Service gibt ein leeres Ergebnis zurück)
+            # Defensive Absicherung für einen unerwartet leeren Service-Rückgabewert.
             raise HTTPException(status_code=404, detail="Mandant nicht gefunden")
 
         result.setdefault("error", None)

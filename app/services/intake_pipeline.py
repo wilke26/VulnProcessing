@@ -33,14 +33,14 @@ async def process_findings(input_data):
     if isinstance(input_data, FindingsEnvelope):
         findings = input_data.items
     else:
-        # Annahme: Es handelt sich bereits um eine Liste von Finding-Objekten
+        # Der Aufrufervertrag erlaubt neben dem Envelope direkt eine Finding-Liste.
         findings = input_data
 
     enriched_results = []
 
     for finding in findings:
-        # Schritt 2: Optionale Anreicherung mit NVD-Daten
-        # Falls der Name wie eine CVE-ID aussieht und kein Risk-Score vorhanden ist
+        # Schritt 2: CVE-Daten abrufen; ein NVD-Score ersetzt den Risk-Score nur,
+        # wenn der Eingang keinen verwertbaren Wert enthält.
         cve_id = getattr(finding, "name", None)
         if cve_id and cve_id.startswith("CVE-"):
             # Asynchroner Abruf

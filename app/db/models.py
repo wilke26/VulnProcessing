@@ -12,9 +12,9 @@ abgebildet werden.
 
 Dieses Modul ist bewusst in sich geschlossen gehalten; jedes Modell
 enthält Relationen, sinnvolle Defaults und Datenbank‑Constraints, um
-Geschäftsregeln bereits auf Schemaebene durchzusetzen. Bei Änderungen
-an diesen Modellen sollte eine passende Alembic‑Migration erzeugt und
-eingespielt werden, damit Schema und Code synchron bleiben.
+Geschäftsregeln bereits auf Schemaebene durchzusetzen. Die Laufzeitinitialisierung
+legt fehlende Tabellen an, migriert aber kein vorhandenes Schema. Modelländerungen
+benötigen deshalb ein explizites, vor dem Deployment getestetes Migrationsskript.
 """
 
 from __future__ import annotations

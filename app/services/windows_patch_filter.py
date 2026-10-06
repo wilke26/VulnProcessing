@@ -263,8 +263,7 @@ class WindowsPatchFilter:
                 # Finding komplett überspringen
                 continue
 
-            # Finding mit aktualisierter Target-Liste
-            # Je nach Implementation: neues Finding-Objekt oder Mutation
+            # Pydantic-Modelle erhalten eine Kopie mit bereinigter Target-Liste.
             if hasattr(finding, "model_copy"):
                 # Pydantic-Modell: Neues Objekt erzeugen
                 updated_finding = finding.model_copy(
@@ -272,7 +271,8 @@ class WindowsPatchFilter:
                 )
                 filtered_findings.append(updated_finding)
             else:
-                # Fallback: Original übernehmen
+                # Nicht-Pydantic-Objekte unterstützen hier kein sicheres Umschreiben
+                # des Target-Felds und werden deshalb unverändert übernommen.
                 filtered_findings.append(finding)
 
         logger.info(

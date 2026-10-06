@@ -10,8 +10,8 @@ Dokumentation: https://nvd.nist.gov/developers/vulnerabilities
     None      = CVE nicht gefunden ODER API-Fehler
   Die Unterscheidung "nicht gefunden" vs. "Fehler" wird intern nur fürs
   Caching genutzt (nicht-gefundene CVEs werden gecacht, Fehler nicht), aber
-  NICHT als String-Sentinel nach außen gegeben – das würde intake_pipeline
-  (prüft nur `if cve_data:`) zum Absturz bringen.
+  NICHT als internes Sentinel nach außen gegeben; Aufrufer erhalten ausschließlich
+  ein Payload-Dictionary oder None.
 - get_multiple_cves(ids) -> list[dict]   (nur Treffer, ohne None/Fehler)
 """
 
