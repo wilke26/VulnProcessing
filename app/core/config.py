@@ -31,7 +31,6 @@ class Settings(BaseSettings):
 
     # --- Allgemeine Einstellungen ---
     APP_NAME: str = "VulnProcessing"
-    APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
 
