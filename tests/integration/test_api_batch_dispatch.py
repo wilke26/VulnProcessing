@@ -7,11 +7,20 @@ from fastapi.testclient import TestClient
 from app.api import routes_tickets
 from app.db.models import Asset, Finding, FindingStatus, Tenant, TicketBatch
 from app.main import app
+from app.services.ticketing_clients import TicketDispatchAttempt, TicketDispatchResult
 
 
 class DummyDispatcher:
     async def dispatch(self, findings, **kwargs):
-        return None
+        findings = list(findings)
+        return TicketDispatchResult(
+            finding_count=len(findings),
+            client_count=1,
+            attempts=tuple(
+                TicketDispatchAttempt(finding.id, "Dummy", True, external_id="EXT")
+                for finding in findings
+            ),
+        )
 
 
 class TestBatchDispatchEndpoint:

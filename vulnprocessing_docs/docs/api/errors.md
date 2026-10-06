@@ -31,6 +31,7 @@ Beispiel:
 | Code | Bedeutung | Endpoints |
 |------|-----------|-----------|
 | `dispatch_failed` | Fehler beim Dispatch von Findings | `POST /tickets/dispatch` |
+| `dispatch_unavailable` | Kein Ticket-Client ist aktiviert | `POST /tickets/dispatch` |
 | `batch_dispatch_failed` | Fehler beim Dispatch eines Batches | `POST /tickets/batch/{id}/dispatch`, `POST /tickets/batch/{id}/send` |
 | `ticket_create_failed` | Fehler beim Ticket-Create-Flow | `POST /tickets/create` |
 | `batch_create_failed` | Fehler beim Erstellen eines Batches | `POST /tickets/batch/create` |

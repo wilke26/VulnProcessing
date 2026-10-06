@@ -4,7 +4,7 @@ Validiert die Geschäftslogik zur Verwaltung von Ticket-Batches, inklusive der
 Nummernvergabe, der Statusverwaltung und der Fehlerbehandlung.
 """
 
-from app.db.models import Finding, Tenant, TicketBatch, TicketBatchStatus
+from app.db.models import Finding, FindingStatus, Tenant, TicketBatch, TicketBatchStatus
 from app.db.repository import TicketBatchRepository
 
 
@@ -112,3 +112,55 @@ class TestTicketBatchRepository:
         # Finding-Status prüfen (muss zurückgesetzt sein)
         assert finding.status == "new"
         assert finding.batch_id is None
+
+    def test_mark_partial_dispatch_preserves_batch_and_successful_side_effects(self, db_session):
+        tenant = Tenant(name="PartialRepositoryTenant")
+        db_session.add(tenant)
+        db_session.flush()
+        batch = TicketBatch(
+            tenant_id=tenant.id,
+            batch_number=1,
+            status=TicketBatchStatus.CREATED.value,
+        )
+        db_session.add(batch)
+        db_session.flush()
+        successful = Finding(
+            tenant_id=tenant.id,
+            asset_id=1,
+            batch_id=batch.id,
+            name="Successful",
+            target="host1",
+            risk=5.0,
+            amount=1,
+            extended_solution_json='["Fix"]',
+            status=FindingStatus.QUEUED.value,
+        )
+        failed = Finding(
+            tenant_id=tenant.id,
+            asset_id=1,
+            batch_id=batch.id,
+            name="Failed",
+            target="host2",
+            risk=5.0,
+            amount=1,
+            extended_solution_json='["Fix"]',
+            status=FindingStatus.QUEUED.value,
+        )
+        db_session.add_all([successful, failed])
+        db_session.commit()
+
+        TicketBatchRepository(db_session).mark_batch_dispatch_partially_failed(
+            batch,
+            "1 of 2 ticket dispatch attempts failed",
+            frozenset({successful.id}),
+        )
+        db_session.commit()
+
+        assert batch.status == TicketBatchStatus.PARTIALLY_FAILED.value
+        assert batch.confirmation_token_hash is None
+        assert batch.sent_at is not None
+        assert batch.completed_at == batch.sent_at
+        assert successful.status == FindingStatus.TICKET_CREATED.value
+        assert failed.status == FindingStatus.QUEUED.value
+        assert successful.batch_id == batch.id
+        assert failed.batch_id == batch.id

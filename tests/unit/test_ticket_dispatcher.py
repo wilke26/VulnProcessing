@@ -49,6 +49,13 @@ class DummyClient:
         return "EXT-1"
 
 
+class FailingClient(DummyClient):
+    name = "Failing"
+
+    async def create_ticket(self, **kwargs) -> str:
+        raise RuntimeError("backend unavailable")
+
+
 @pytest.mark.asyncio
 async def test_dispatcher_uses_injected_clients():
     settings = Settings(
@@ -64,10 +71,47 @@ async def test_dispatcher_uses_injected_clients():
     )
 
     finding = DummyFinding(id=1, name="Finding A", tenant="TenantA", priority_score=95.0)
-    await dispatcher.dispatch([finding], batch_id=7, dispatch_token="A" * 43)
+    result = await dispatcher.dispatch([finding], batch_id=7, dispatch_token="A" * 43)
 
     assert len(client.calls) == 1
     assert client.calls[0]["tenant"] == "TenantA"
     assert client.calls[0]["batch_id"] == 7
     assert client.calls[0]["dispatch_token"] == "A" * 43
     assert "Finding A" in client.calls[0]["title"]
+    assert result.succeeded is True
+    assert result.successful_attempts == 1
+    assert result.failed_attempts == 0
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_reports_missing_clients():
+    dispatcher = TicketDispatcher(
+        settings=Settings(),
+        remediation_service=DummyRemediationService(),
+        clients=[],
+    )
+    finding = DummyFinding(id=1, name="Finding A", tenant="TenantA", priority_score=95.0)
+
+    result = await dispatcher.dispatch([finding])
+
+    assert result.no_clients is True
+    assert result.succeeded is False
+    assert result.attempts == ()
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_reports_partial_client_failure():
+    dispatcher = TicketDispatcher(
+        settings=Settings(),
+        remediation_service=DummyRemediationService(),
+        clients=[DummyClient(), FailingClient()],
+    )
+    finding = DummyFinding(id=7, name="Finding A", tenant="TenantA", priority_score=95.0)
+
+    result = await dispatcher.dispatch([finding])
+
+    assert result.succeeded is False
+    assert result.partially_failed is True
+    assert result.successful_attempts == 1
+    assert result.failed_attempts == 1
+    assert result.successful_finding_ids == frozenset({7})

@@ -38,6 +38,7 @@ from app.services.composition_root import (
     build_ticket_dispatcher,
     build_ticket_preparation,
 )
+from app.services.ticketing_clients import TicketDispatchResult
 
 # Logger initialisieren
 logger = get_logger(__name__)
@@ -197,7 +198,8 @@ async def dispatch_tickets(
             # Konfiguration nicht durch das leere Ergebnis verdeckt werden.
             if not dry_run:
                 dispatcher = build_ticket_dispatcher()
-                await dispatcher.dispatch([])
+                dispatch_result = await dispatcher.dispatch([])
+                _require_successful_dispatch(dispatch_result)
             return {
                 "dispatched": 0,
                 "filtered": 0,
@@ -225,7 +227,8 @@ async def dispatch_tickets(
 
         if not dry_run:
             dispatcher = build_ticket_dispatcher()
-            await dispatcher.dispatch(filtered_findings)
+            dispatch_result = await dispatcher.dispatch(filtered_findings)
+            _require_successful_dispatch(dispatch_result)
 
         return {
             "dispatched": len(filtered_findings),
@@ -630,6 +633,23 @@ def _load_bounded_ticket_findings(query):
             ),
         )
     return findings
+
+
+def _require_successful_dispatch(result: TicketDispatchResult) -> None:
+    """Reject direct dispatches that produced no complete external delivery."""
+
+    if not isinstance(result, TicketDispatchResult):
+        raise RuntimeError("TicketDispatcher returned no structured dispatch result")
+    if result.no_clients:
+        raise HTTPException(
+            status_code=503,
+            detail=error_detail("dispatch_unavailable", "Keine Ticket-Clients konfiguriert"),
+        )
+    if not result.succeeded:
+        raise HTTPException(
+            status_code=502,
+            detail=error_detail("dispatch_failed", "Ticket-Dispatch fehlgeschlagen"),
+        )
 
 
 router.include_router(management_router)

@@ -15,8 +15,23 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
+from app.api import routes_tickets
 from app.core.config import settings
 from app.main import app
+from app.services.ticketing_clients import TicketDispatchAttempt, TicketDispatchResult
+
+
+class SuccessfulDispatcher:
+    async def dispatch(self, findings, **kwargs):
+        findings = list(findings)
+        return TicketDispatchResult(
+            finding_count=len(findings),
+            client_count=1,
+            attempts=tuple(
+                TicketDispatchAttempt(finding.id, "E2E", True, external_id="EXT")
+                for finding in findings
+            ),
+        )
 
 
 class TestCompleteTicketingWorkflow:
@@ -35,6 +50,11 @@ class TestCompleteTicketingWorkflow:
         5. Bestätigung des Batch-Abschlusses (Simulation Rückkanal).
         6. Verifizierung, dass Folge-Batches korrekt inkrementiert werden.
         """
+        monkeypatch.setattr(
+            routes_tickets,
+            "build_ticket_dispatcher",
+            lambda: SuccessfulDispatcher(),
+        )
         client = TestClient(app)
 
         # 1. Import: Simulation einer Dateianlieferung (JSON)

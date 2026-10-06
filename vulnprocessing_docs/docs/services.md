@@ -31,13 +31,11 @@ Der Service liefert eine Liste priorisierter Findings und mappt die Prioritaetsw
 
 ## BatchTicketingService
 
-Der `BatchTicketingService` erstellt Ticket‑Batches aus priorisierten Findings und kann diese an konfigurierte Ticket‑Clients dispatchen. Dazu wird pro Tenant und Zielsystem ein neuer `TicketBatch` angelegt. Der Batch‑Status (`created`, `pending`, `processing`, `completed`, `failed`) sowie Erfolgs‑ und Fehlermeldungen werden dokumentiert. Ein Retry‑Mechanismus kann fehlgeschlagene Übertragungen erneut versuchen.
-
-Neu: `dispatch_batch` nutzt den `TicketDispatcher` statt direkter Connectoren.
+Der `BatchTicketingService` erstellt Ticket‑Batches aus priorisierten Findings und kann diese an konfigurierte Ticket‑Clients dispatchen. Dazu wird pro Tenant und Zielsystem ein neuer `TicketBatch` angelegt. Der Batch‑Status (`created`, `pending`, `processing`, `completed`, `failed`, `partially_failed`, `partially_completed`) sowie Erfolgs‑ und Fehlermeldungen werden dokumentiert. Nur vollständig erfolgreiche Dispatches werden `pending`. Ein vollständiger Fehler gibt Findings für einen späteren Versuch frei; ein Teilerfolg bleibt zur manuellen Auflösung terminal, damit bereits erzeugte Tickets nicht dupliziert werden.
 
 ## TicketDispatcher
 
-Der `TicketDispatcher` sendet Findings an konfigurierte Ticket‑Clients. Er arbeitet gegen ein schmales Interface (TicketClient) und wird ueber eine Registry aufgebaut. E‑Mail‑Clients sind aktivierbar, REST‑Clients sind aktuell Platzhalter.
+Der `TicketDispatcher` sendet Findings an konfigurierte Ticket‑Clients. Er arbeitet gegen ein schmales Interface (`TicketClient`) und wird über eine Registry aufgebaut. E‑Mail‑ und REST‑Clients sind über Feature‑Flags aktivierbar. Das Ergebnis enthält für jede Kombination aus Finding und aktivem Client einen erfolgreichen oder fehlgeschlagenen Versuch.
 
 ## Retry-Konfiguration
 

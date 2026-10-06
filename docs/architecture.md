@@ -72,9 +72,12 @@ Schichtung.
    N-Central auf bereits installierte Windows-Patches prüfen.
 6. Ein tenantbezogener Batch fasst Findings zusammen und übergibt sie an alle
    aktivierten Ticket-Clients.
-7. Beim Batch-Dispatch wird ein zufälliges Bestätigungstoken ausgegeben; gespeichert
-   wird nur dessen SHA-256-Digest.
-8. Die Bestätigung prüft HMAC, Zeitfenster, Dispatch-Token, Batch-Zustand und
+7. Der Dispatcher liefert ein Ergebnis pro Finding und Client. Nur wenn alle Versuche
+   erfolgreich waren, wechselt der Batch nach `pending`; kein Client beziehungsweise
+   vollständiges Scheitern führt zu `failed`, ein Teilerfolg zu `partially_failed`.
+8. Bei erfolgreichem Batch-Dispatch wird ein zufälliges Bestätigungstoken ausgegeben;
+   gespeichert wird nur dessen SHA-256-Digest.
+9. Die Bestätigung prüft HMAC, Zeitfenster, Dispatch-Token, Batch-Zustand und
    Ergebniszahlen, bevor sie den Zustand atomar beansprucht und abschließt.
 
 ## Persistenz- und Konsistenzgrenze
@@ -130,10 +133,9 @@ unterstützten Deploymentvarianten. Für die Bewerbungsreferenz gilt daher die i
 
 ## Bekannte Architekturarbeit
 
-- atomarer, idempotenter Dispatch mit ausdrücklichen Erfolgs- und Fehlerergebnissen;
+- atomarer und idempotenter Claim vor externen Dispatch-Nebenwirkungen;
 - Antwortgrößen- und Item-Limits für externe Adapter sowie Fleet-weite Admission Control;
 - verifizierte Transportverschlüsselung für die übrigen credentialtragenden Adapter;
-- konsistente öffentliche Fehlerverträge ohne interne Pfade oder Exceptions;
 - Bereinigung der parallelen alten und neuen Persistenz-/Intake-Pfade;
 - Entscheidung über eine unterstützte Deploymentform oder Entfernung unvollständiger
   Deploymentartefakte.

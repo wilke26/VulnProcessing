@@ -8,6 +8,7 @@ indem der Dispatcher gegen ein schmales Interface arbeitet.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
 from app.core.config import Settings
@@ -16,6 +17,69 @@ from app.services.ticketing_clients_email import DocBeeEmailClient, MKSEmailClie
 from app.services.ticketing_clients_rest import DocBeeRestClient, MKSRestClient
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class TicketDispatchAttempt:
+    """Result of sending one finding to one configured ticket client."""
+
+    finding_id: int | None
+    client_name: str
+    success: bool
+    external_id: str | None = None
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class TicketDispatchResult:
+    """Aggregate result for one dispatcher invocation."""
+
+    finding_count: int
+    client_count: int
+    attempts: tuple[TicketDispatchAttempt, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.finding_count < 0 or self.client_count < 0:
+            raise ValueError("Dispatch result counts must not be negative")
+        if len(self.attempts) != self.expected_attempts:
+            raise ValueError("Dispatch result must contain one attempt per finding and client")
+
+    @property
+    def expected_attempts(self) -> int:
+        return self.finding_count * self.client_count
+
+    @property
+    def successful_attempts(self) -> int:
+        return sum(attempt.success for attempt in self.attempts)
+
+    @property
+    def failed_attempts(self) -> int:
+        return sum(not attempt.success for attempt in self.attempts)
+
+    @property
+    def no_clients(self) -> bool:
+        return self.client_count == 0
+
+    @property
+    def succeeded(self) -> bool:
+        return not self.no_clients and self.failed_attempts == 0
+
+    @property
+    def partially_failed(self) -> bool:
+        return self.successful_attempts > 0 and self.failed_attempts > 0
+
+    @property
+    def successful_finding_ids(self) -> frozenset[int]:
+        return frozenset(
+            attempt.finding_id
+            for attempt in self.attempts
+            if attempt.success and attempt.finding_id is not None
+        )
+
+    def failure_summary(self) -> str:
+        if self.no_clients:
+            return "No active ticket clients configured"
+        return f"{self.failed_attempts} of {self.expected_attempts} ticket dispatch attempts failed"
 
 
 class TicketClient(Protocol):
@@ -44,7 +108,7 @@ class TicketDispatcherProtocol(Protocol):
         *,
         batch_id: int | None = None,
         dispatch_token: str | None = None,
-    ) -> None: ...
+    ) -> TicketDispatchResult: ...
 
 
 class TicketClientRegistry:

@@ -28,7 +28,7 @@ from app.services.ticket_preparation import (
     TicketPreparationService,
     build_ticket_preparation_service,
 )
-from app.services.ticketing_clients import TicketDispatcherProtocol
+from app.services.ticketing_clients import TicketDispatcherProtocol, TicketDispatchResult
 
 # Logger initialisieren
 logger = get_logger(__name__)
@@ -268,11 +268,34 @@ class BatchTicketingService:
 
         try:
             confirmation_token, confirmation_token_hash = issue_dispatch_confirmation_token()
-            await dispatcher.dispatch(
+            dispatch_result = await dispatcher.dispatch(
                 findings,
                 batch_id=batch.id,
                 dispatch_token=confirmation_token,
             )
+
+            if not isinstance(dispatch_result, TicketDispatchResult):
+                raise TypeError("TicketDispatcher returned no structured dispatch result")
+
+            if not dispatch_result.succeeded:
+                failure_summary = dispatch_result.failure_summary()
+                if dispatch_result.partially_failed:
+                    batch_repo.mark_batch_dispatch_partially_failed(
+                        batch,
+                        failure_summary,
+                        dispatch_result.successful_finding_ids,
+                    )
+                else:
+                    batch_repo.mark_batch_failed(batch, failure_summary)
+                session.commit()
+                return {
+                    "success": False,
+                    "error": failure_summary,
+                    "batch_id": batch.id,
+                    "batch_status": batch.status,
+                    "successful_attempts": dispatch_result.successful_attempts,
+                    "failed_attempts": dispatch_result.failed_attempts,
+                }
 
             # Findings als ticketing_in_progress markieren
             for finding in findings:
@@ -290,6 +313,8 @@ class BatchTicketingService:
                 "success": True,
                 "batch_id": batch.id,
                 "tickets_dispatched": len(findings),
+                "successful_attempts": dispatch_result.successful_attempts,
+                "failed_attempts": 0,
                 "batch_status": batch.status,
                 "dispatch_token": confirmation_token,
             }

@@ -20,7 +20,9 @@ from app.services.remediation_service import RemediationService
 from app.services.ticketing_clients import (
     TicketClient,
     TicketClientRegistry,
+    TicketDispatchAttempt,
     TicketDispatcherProtocol,
+    TicketDispatchResult,
     build_ticket_client_registry,
 )
 
@@ -68,20 +70,29 @@ class TicketDispatcher(TicketDispatcherProtocol):
         *,
         batch_id: int | None = None,
         dispatch_token: str | None = None,
-    ) -> None:
+    ) -> TicketDispatchResult:
         """
         Erstellt Tickets für die übergebenen Findings in allen konfigurierten Systemen.
 
         Args:
             findings (Iterable[Any]): Eine Liste von Findings (ORM-Modelle oder DTOs).
+
+        Returns:
+            Strukturiertes Ergebnis mit einem Versuch pro Finding und aktivem Client.
         """
         findings_list = list(findings)
         if not findings_list:
             logger.info("Keine Findings zum Versenden von Tickets vorhanden.")
-            return
+            return TicketDispatchResult(
+                finding_count=0,
+                client_count=len(self.clients),
+            )
         if not self.clients:
             logger.warning("Keine Ticket-Clients konfiguriert, Abbruch des Dispatchings.")
-            return
+            return TicketDispatchResult(
+                finding_count=len(findings_list),
+                client_count=0,
+            )
 
         # 1. Schritt: KI-Behebungsleitfäden abrufen (falls Copilot aktiviert ist)
         remediation_results: dict[Any, Any] = {}
@@ -94,6 +105,7 @@ class TicketDispatcher(TicketDispatcherProtocol):
                 logger.exception("Abruf der Behebungsleitfäden fehlgeschlagen: %s", exc)
 
         # 2. Schritt: Jedes Finding einzeln verarbeiten und versenden
+        attempts: list[TicketDispatchAttempt] = []
         for finding in findings_list:
             try:
                 title = self._build_title(finding)
@@ -105,6 +117,7 @@ class TicketDispatcher(TicketDispatcherProtocol):
 
                 tenant = getattr(finding, "tenant", "") or getattr(finding, "tenant_id", "")
                 for client in self.clients:
+                    client_name = self._client_name(client)
                     try:
                         ext_id = await client.create_ticket(
                             title=title,
@@ -116,20 +129,71 @@ class TicketDispatcher(TicketDispatcherProtocol):
                         )
                         logger.info(
                             "%s-Ticket %s für Finding '%s' erstellt (Tenant: %s).",
-                            client.name,
+                            client_name,
                             ext_id,
                             title,
                             tenant,
                         )
+                        attempts.append(
+                            TicketDispatchAttempt(
+                                finding_id=self._finding_id(finding),
+                                client_name=client_name,
+                                success=True,
+                                external_id=ext_id,
+                            )
+                        )
                     except Exception as exc:
                         logger.exception(
                             "%s-Ticket-Erstellung fehlgeschlagen für '%s': %s",
-                            client.name,
+                            client_name,
                             title,
                             exc,
                         )
+                        attempts.append(
+                            TicketDispatchAttempt(
+                                finding_id=self._finding_id(finding),
+                                client_name=client_name,
+                                success=False,
+                                error=str(exc),
+                            )
+                        )
             except Exception as exc:
                 logger.exception("Unerwarteter Fehler beim Dispatching eines Tickets: %s", exc)
+                for client in self.clients:
+                    attempts.append(
+                        TicketDispatchAttempt(
+                            finding_id=self._finding_id(finding),
+                            client_name=self._client_name(client),
+                            success=False,
+                            error=str(exc),
+                        )
+                    )
+
+        return TicketDispatchResult(
+            finding_count=len(findings_list),
+            client_count=len(self.clients),
+            attempts=tuple(attempts),
+        )
+
+    @staticmethod
+    def _finding_id(finding: Any) -> int | None:
+        """Read an optional database ID without allowing a broken object to mask a result."""
+
+        try:
+            finding_id = getattr(finding, "id", None)
+        except Exception:
+            return None
+        return finding_id if isinstance(finding_id, int) else None
+
+    @staticmethod
+    def _client_name(client: TicketClient) -> str:
+        """Return a stable client label even for a malformed adapter object."""
+
+        try:
+            name = client.name
+        except Exception:
+            return type(client).__name__
+        return name if isinstance(name, str) and name else type(client).__name__
 
     def _lookup_guide(self, remediation_results: dict[Any, Any], finding: Any) -> Any | None:
         """

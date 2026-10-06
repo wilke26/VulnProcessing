@@ -92,6 +92,7 @@ class TicketBatchStatus(enum.StrEnum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    PARTIALLY_FAILED = "partially_failed"
     PARTIALLY_COMPLETED = "partially_completed"
 
 
