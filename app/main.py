@@ -10,7 +10,9 @@ from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 
+from app.api.errors import internal_error_response, request_validation_error_response
 from app.api.routes_health import router as health_router
 from app.api.routes_import import router as import_router
 from app.api.routes_tickets import router as tickets_router
@@ -93,6 +95,8 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json" if settings.DEBUG else None,
     )
     app.add_middleware(RequestBodyLimitMiddleware)
+    app.add_exception_handler(RequestValidationError, request_validation_error_response)
+    app.add_exception_handler(Exception, internal_error_response)
 
     # Router für die verschiedenen API-Module registrieren
     app.include_router(health_router)

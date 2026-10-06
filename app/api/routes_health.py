@@ -52,7 +52,6 @@ def file_meta(p: Path) -> dict:
         "sha256": sha256(data).hexdigest()[:12],
         # Änderungszeitpunkt in UTC mit tzinfo, konsistent zur Service-Zeit
         "modified": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
-        "path": str(p),
     }
 
 

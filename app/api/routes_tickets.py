@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
+from app.api.errors import error_detail, sanitized_validation_errors
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.management_auth import (
@@ -50,9 +51,12 @@ management_router = APIRouter(
 webhook_router = APIRouter(prefix="/tickets", tags=["tickets"])
 router = APIRouter()
 
-
-def _error_detail(code: str, error: str) -> dict[str, str]:
-    return {"error": error, "code": code}
+CONFIRMATION_ERROR_MESSAGES = {
+    "batch_not_found": "Batch nicht gefunden",
+    "invalid_batch_state": "Batch wartet nicht auf diese Bestätigung",
+    "invalid_confirmation_counts": "Bestätigungszahlen passen nicht zum Batch",
+    "invalid_confirmation_details": "Einzelbestätigungen passen nicht zum Batch",
+}
 
 
 @management_router.post("/create", dependencies=[Depends(enforce_management_capacity)])
@@ -149,7 +153,8 @@ async def create_tickets(
     except Exception as e:
         logger.exception("Fehler bei Ticket-Erstellung")
         raise HTTPException(
-            status_code=500, detail=_error_detail("ticket_create_failed", str(e))
+            status_code=500,
+            detail=error_detail("ticket_create_failed", "Ticket-Erstellung fehlgeschlagen"),
         ) from e
 
 
@@ -233,7 +238,10 @@ async def dispatch_tickets(
         raise
     except Exception as e:
         logger.exception("Fehler beim Dispatching von Tickets")
-        raise HTTPException(status_code=500, detail=_error_detail("dispatch_failed", str(e))) from e
+        raise HTTPException(
+            status_code=500,
+            detail=error_detail("dispatch_failed", "Ticket-Dispatch fehlgeschlagen"),
+        ) from e
 
 
 class TicketConfirmation(BaseModel):
@@ -304,7 +312,8 @@ async def create_ticket_batch(
     except Exception as e:
         logger.exception("Fehler bei Batch-Erstellung")
         raise HTTPException(
-            status_code=500, detail=_error_detail("batch_create_failed", str(e))
+            status_code=500,
+            detail=error_detail("batch_create_failed", "Batch-Erstellung fehlgeschlagen"),
         ) from e
 
 
@@ -337,9 +346,7 @@ async def send_batch(
         if not result.get("success"):
             raise HTTPException(
                 status_code=422,
-                detail=_error_detail(
-                    "batch_dispatch_failed", result.get("error", "Dispatch fehlgeschlagen")
-                ),
+                detail=error_detail("batch_dispatch_failed", "Batch-Dispatch fehlgeschlagen"),
             )
 
         result.setdefault("batch_status", "pending")
@@ -352,7 +359,8 @@ async def send_batch(
     except Exception as e:
         logger.exception("Fehler beim Senden des Batches")
         raise HTTPException(
-            status_code=500, detail=_error_detail("batch_dispatch_failed", str(e))
+            status_code=500,
+            detail=error_detail("batch_dispatch_failed", "Batch-Dispatch fehlgeschlagen"),
         ) from e
 
 
@@ -375,9 +383,7 @@ async def dispatch_batch(
         if not result.get("success"):
             raise HTTPException(
                 status_code=422,
-                detail=_error_detail(
-                    "batch_dispatch_failed", result.get("error", "Dispatch fehlgeschlagen")
-                ),
+                detail=error_detail("batch_dispatch_failed", "Batch-Dispatch fehlgeschlagen"),
             )
 
         result.setdefault("batch_status", "pending")
@@ -389,7 +395,8 @@ async def dispatch_batch(
     except Exception as e:
         logger.exception("Fehler beim Dispatching des Batches")
         raise HTTPException(
-            status_code=500, detail=_error_detail("batch_dispatch_failed", str(e))
+            status_code=500,
+            detail=error_detail("batch_dispatch_failed", "Batch-Dispatch fehlgeschlagen"),
         ) from e
 
 
@@ -435,18 +442,18 @@ async def confirm_batch(
         logger.error("Batch-Webhook-Authentifizierung ist nicht konfiguriert")
         raise HTTPException(
             status_code=503,
-            detail=_error_detail("webhook_unavailable", "Webhook nicht verfügbar"),
+            detail=error_detail("webhook_unavailable", "Webhook nicht verfügbar"),
         ) from exc
     except WebhookAuthenticationError as exc:
         raise HTTPException(
             status_code=401,
-            detail=_error_detail("invalid_webhook_auth", "Ungültige Webhook-Authentifizierung"),
+            detail=error_detail("invalid_webhook_auth", "Ungültige Webhook-Authentifizierung"),
         ) from exc
 
     try:
         confirmation = BatchConfirmation.model_validate_json(body)
     except ValidationError as exc:
-        errors = [{**error, "loc": ("body", *error.get("loc", ()))} for error in exc.errors()]
+        errors = sanitized_validation_errors(exc.errors(), location_prefix=("body",))
         raise HTTPException(status_code=422, detail=errors) from exc
 
     try:
@@ -465,12 +472,13 @@ async def confirm_batch(
         )
 
         if not result.get("success"):
-            status_code = 404 if result.get("code") == "batch_not_found" else 409
+            code = result.get("code", "batch_confirmation_rejected")
+            status_code = 404 if code == "batch_not_found" else 409
             raise HTTPException(
                 status_code=status_code,
-                detail=_error_detail(
-                    result.get("code", "batch_confirmation_rejected"),
-                    result.get("error", "Batch-Bestätigung abgelehnt"),
+                detail=error_detail(
+                    code,
+                    CONFIRMATION_ERROR_MESSAGES.get(code, "Batch-Bestätigung abgelehnt"),
                 ),
             )
 
@@ -482,7 +490,7 @@ async def confirm_batch(
         logger.exception("Fehler bei Batch-Bestätigung")
         raise HTTPException(
             status_code=500,
-            detail=_error_detail("batch_confirmation_failed", "Batch-Bestätigung fehlgeschlagen"),
+            detail=error_detail("batch_confirmation_failed", "Batch-Bestätigung fehlgeschlagen"),
         ) from e
 
 
@@ -544,7 +552,12 @@ async def get_batch_status(
         raise
     except Exception as e:
         logger.exception("Fehler beim Abrufen des Batch-Status")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500,
+            detail=error_detail(
+                "batch_status_failed", "Batch-Status konnte nicht abgerufen werden"
+            ),
+        ) from e
 
 
 @management_router.get("/batch/statistics/{tenant_name}")
@@ -580,7 +593,13 @@ async def get_batch_statistics(
         raise
     except Exception as e:
         logger.exception("Fehler beim Abrufen der Statistiken")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(
+            status_code=500,
+            detail=error_detail(
+                "batch_statistics_failed",
+                "Batch-Statistiken konnten nicht abgerufen werden",
+            ),
+        ) from e
 
 
 def _require_batch_tenant_access(batch_id: int, principal: ManagementPrincipal) -> None:
@@ -602,7 +621,7 @@ def _load_bounded_ticket_findings(query):
     if len(findings) > limit:
         raise HTTPException(
             status_code=422,
-            detail=_error_detail(
+            detail=error_detail(
                 "operation_item_limit_exceeded",
                 "Zu viele Findings; Tenant- oder Risiko-Filter weiter einschränken",
             ),

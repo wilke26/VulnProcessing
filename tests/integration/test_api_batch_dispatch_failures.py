@@ -22,6 +22,12 @@ class TestBatchDispatchFailures:
         assert response.json()["detail"] == "Batch nicht gefunden"
 
     def test_dispatch_error_returns_422(self, db_session, monkeypatch, assert_error_detail):
+        internal_detail = "https://backend.internal/dispatch?token=secret"
+
+        class LeakingDispatcher:
+            async def dispatch(self, findings, **kwargs):
+                raise RuntimeError(internal_detail)
+
         tenant = Tenant(name="TestTenant_BatchDispatchFail")
         asset = Asset(tenant=tenant, name="server01")
         db_session.add_all([tenant, asset])
@@ -45,10 +51,12 @@ class TestBatchDispatchFailures:
         db_session.add(finding)
         db_session.commit()
 
-        monkeypatch.setattr(routes_tickets, "build_ticket_dispatcher", lambda: DummyDispatcher())
+        monkeypatch.setattr(routes_tickets, "build_ticket_dispatcher", lambda: LeakingDispatcher())
 
         client = TestClient(app)
         response = client.post(f"/tickets/batch/{batch.id}/dispatch")
         assert response.status_code == 422
         detail = response.json().get("detail", {})
         assert_error_detail(detail, "batch_dispatch_failed")
+        assert detail["error"] == "Batch-Dispatch fehlgeschlagen"
+        assert internal_detail not in response.text

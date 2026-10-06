@@ -27,7 +27,13 @@ class TestDispatchFailures:
         assert data["dispatched"] == 0
 
     def test_dispatch_error_returns_500(self, db_session, monkeypatch, assert_error_detail):
-        monkeypatch.setattr(routes_tickets, "build_ticket_dispatcher", lambda: DummyDispatcher())
+        internal_detail = "/srv/private/vulnprocessing.sqlite3"
+
+        class LeakingDispatcher:
+            async def dispatch(self, findings):
+                raise RuntimeError(internal_detail)
+
+        monkeypatch.setattr(routes_tickets, "build_ticket_dispatcher", lambda: LeakingDispatcher())
         monkeypatch.setattr(routes_tickets, "build_ticket_preparation", lambda: DummyPrepService())
 
         client = TestClient(app)
@@ -35,3 +41,5 @@ class TestDispatchFailures:
         assert response.status_code == 500
         detail = response.json().get("detail", {})
         assert_error_detail(detail, "dispatch_failed")
+        assert detail["error"] == "Ticket-Dispatch fehlgeschlagen"
+        assert internal_detail not in response.text

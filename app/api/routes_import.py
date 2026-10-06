@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import TypeAdapter, ValidationError
 from starlette.datastructures import UploadFile
 
+from app.api.errors import sanitized_validation_errors
 from app.core.config import settings
 from app.core.management_auth import (
     FINDINGS_IMPORT,
@@ -105,8 +106,10 @@ async def import_findings(
     try:
         parsed = adapter.validate_python(data)
     except ValidationError as e:
-        # Validierungsfehler zurückgeben
-        raise HTTPException(status_code=422, detail=e.errors()) from e
+        raise HTTPException(
+            status_code=422,
+            detail=sanitized_validation_errors(e.errors(), location_prefix=("body",)),
+        ) from e
 
     # Normalisierung der Daten zu einer Liste von Finding-Objekten
     if isinstance(parsed, list):
