@@ -28,8 +28,7 @@ def init_db() -> None:
     with get_conn() as conn:
         cur = conn.cursor()
         # Beispiel-Schema für die Tabelle "findings" (Legacy/Direct SQLite)
-        cur.execute(
-            """
+        cur.execute("""
                 CREATE TABLE IF NOT EXISTS findings (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL,
@@ -42,8 +41,7 @@ def init_db() -> None:
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(name, tenant, target)
                 );
-            """
-        )
+            """)
         conn.commit()
 
 
