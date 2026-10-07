@@ -45,6 +45,7 @@ ruff = "^0.14.8"
 mkdocs-material = "^9.7.7"
 mkdocstrings = {extras = ["python"], version = "^1.0.0"}
 hypothesis = "^6.125.0"
+httpx2 = "^2.13.0"
 
 [tool.poetry.group.docs.dependencies]
 mkdocs = "^1.6.1"
