@@ -18,6 +18,7 @@ Dokumentation: https://nvd.nist.gov/developers/vulnerabilities
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from typing import Any
 
@@ -30,6 +31,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from app.core.config import Settings
 from app.core.config import settings as cfg
 from app.core.logging import get_logger
 
@@ -38,6 +40,45 @@ logger = get_logger(__name__)
 # Eindeutiger Marker, um "CVE existiert nicht" im Cache von echten Treffern zu
 # unterscheiden. Verlässt diese Datei NICHT (rein internes Caching-Detail).
 _NOT_FOUND = object()
+
+
+class _ProcessRequestGate:
+    """Process-wide concurrency and start-rate boundary for NVD HTTP attempts."""
+
+    def __init__(self, concurrency: int) -> None:
+        self._semaphore = threading.BoundedSemaphore(concurrency)
+        self._schedule_lock = threading.Lock()
+        self._next_request_at = 0.0
+
+    async def acquire(self) -> None:
+        while not self._semaphore.acquire(blocking=False):
+            await asyncio.sleep(0.001)
+
+    def release(self) -> None:
+        self._semaphore.release()
+
+    async def wait_for_slot(self, interval_seconds: float) -> None:
+        with self._schedule_lock:
+            now = time.monotonic()
+            scheduled_at = max(now, self._next_request_at)
+            self._next_request_at = scheduled_at + interval_seconds
+        delay = scheduled_at - now
+        if delay > 0:
+            await asyncio.sleep(delay)
+
+
+_PROCESS_REQUEST_GATES: dict[tuple[int, float], _ProcessRequestGate] = {}
+_PROCESS_GATE_REGISTRY_LOCK = threading.Lock()
+
+
+def _get_process_request_gate(concurrency: int, interval: float) -> _ProcessRequestGate:
+    key = (concurrency, interval)
+    with _PROCESS_GATE_REGISTRY_LOCK:
+        gate = _PROCESS_REQUEST_GATES.get(key)
+        if gate is None:
+            gate = _ProcessRequestGate(concurrency)
+            _PROCESS_REQUEST_GATES[key] = gate
+        return gate
 
 
 class NVDClient:
@@ -63,6 +104,9 @@ class NVDClient:
         api_key: str | None = None,
         cache_ttl: int | None = None,
         requests_per_second: float | None = None,
+        max_concurrent_requests: int | None = None,
+        max_cves_per_batch: int | None = None,
+        settings_obj: Settings = cfg,
     ) -> None:
         """Initialisiert den NVD-Client.
 
@@ -73,20 +117,24 @@ class NVDClient:
                 wird Settings.NVD_CACHE_TTL genutzt.
             requests_per_second: Optionaler Override des Rate-Limits. Ohne Angabe
                 wird dynamisch aus Settings.NVD_RATE_LIMIT(_WITH_KEY) berechnet.
+            max_concurrent_requests: Optionales Parallelitätslimit für HTTP-Anfragen.
+            max_cves_per_batch: Maximale Anzahl CVEs pro Batch-Aufruf.
+            settings_obj: Validierte Anwendungseinstellungen für Standardwerte.
         """
-        config_api_key: str | None = getattr(cfg, "NVD_API_KEY", None)
+        self._settings = settings_obj
+        config_api_key: str | None = getattr(settings_obj, "NVD_API_KEY", None)
         self.api_key: str | None = api_key or config_api_key
 
         self._base_url: str = getattr(
-            cfg, "NVD_BASE_URL", "https://services.nvd.nist.gov/rest/json/cves/2.0"
+            settings_obj, "NVD_BASE_URL", "https://services.nvd.nist.gov/rest/json/cves/2.0"
         )
-        self._timeout: int = int(getattr(cfg, "NVD_TIMEOUT", 30) or 30)
+        self._timeout: int = int(getattr(settings_obj, "NVD_TIMEOUT", 30) or 30)
 
         # --- Cache-TTL: expliziter Override > Settings > Default ---
         ttl_candidate: int | None = (
             cache_ttl
             if isinstance(cache_ttl, int) and cache_ttl > 0
-            else getattr(cfg, "NVD_CACHE_TTL", None)
+            else getattr(settings_obj, "NVD_CACHE_TTL", None)
         )
         cache_ttl_effective: int = (
             ttl_candidate
@@ -97,21 +145,42 @@ class NVDClient:
 
         # --- Rate-Limit: Mindestabstand zwischen zwei Requests (Sekunden) ---
         if requests_per_second is not None and requests_per_second > 0:
-            self._rate_limit_seconds: float = round(1.0 / requests_per_second, 4)
+            self._rate_limit_seconds: float = max(round(1.0 / requests_per_second, 4), 0.0001)
         else:
             effective_rate: int = self._effective_rate_limit()
             self._rate_limit_seconds = round(self._RATE_WINDOW_SECONDS / effective_rate, 4)
-        self._last_request_time: float = 0.0
+        concurrency = self._normalize_int(
+            (
+                max_concurrent_requests
+                if max_concurrent_requests is not None
+                else getattr(settings_obj, "NVD_MAX_CONCURRENT_REQUESTS", None)
+            ),
+            5,
+        )
+        self._max_concurrent_requests = concurrency
+        self._request_gate = (
+            _get_process_request_gate(concurrency, self._rate_limit_seconds)
+            if max_concurrent_requests is None and requests_per_second is None
+            else _ProcessRequestGate(concurrency)
+        )
+        self._max_cves_per_batch = self._normalize_int(
+            (
+                max_cves_per_batch
+                if max_cves_per_batch is not None
+                else getattr(settings_obj, "MAX_CVES_PER_TICKET_OPERATION", None)
+            ),
+            500,
+        )
 
         # --- Retry-Konfiguration aus Settings ---
         retries: int = self._normalize_int(
-            getattr(cfg, "MAX_RETRIES", None), self._DEFAULT_MAX_RETRIES
+            getattr(settings_obj, "MAX_RETRIES", None), self._DEFAULT_MAX_RETRIES
         )
         retry_min: float = self._normalize_float(
-            getattr(cfg, "RETRY_MIN_SECONDS", None), self._DEFAULT_RETRY_MIN_SEC
+            getattr(settings_obj, "RETRY_MIN_SECONDS", None), self._DEFAULT_RETRY_MIN_SEC
         )
         retry_max: float = self._normalize_float(
-            getattr(cfg, "RETRY_MAX_SECONDS", None), self._DEFAULT_RETRY_MAX_SEC
+            getattr(settings_obj, "RETRY_MAX_SECONDS", None), self._DEFAULT_RETRY_MAX_SEC
         )
         self._retry_ctx: AsyncRetrying = AsyncRetrying(
             retry=retry_if_exception(self._is_retryable_exc),
@@ -126,12 +195,12 @@ class NVDClient:
     def _effective_rate_limit(self) -> int:
         """Requests pro 30-s-Fenster, abhängig vom Key-Status."""
         # Property aus Settings bevorzugen, sonst manuell ableiten.
-        prop = getattr(cfg, "nvd_rate_limit_effective", None)
+        prop = getattr(self._settings, "nvd_rate_limit_effective", None)
         if isinstance(prop, int) and prop > 0:
             return prop
         if self.api_key:
-            return int(getattr(cfg, "NVD_RATE_LIMIT_WITH_KEY", 50) or 50)
-        return int(getattr(cfg, "NVD_RATE_LIMIT", 5) or 5)
+            return int(getattr(self._settings, "NVD_RATE_LIMIT_WITH_KEY", 50) or 50)
+        return int(getattr(self._settings, "NVD_RATE_LIMIT", 5) or 5)
 
     @staticmethod
     def _normalize_int(value: Any | None, default: int) -> int:
@@ -153,11 +222,7 @@ class NVDClient:
 
     async def _rate_limit(self) -> None:
         """Erzwingt den Mindestabstand zwischen zwei Requests."""
-        now: float = time.time()
-        elapsed: float = now - self._last_request_time
-        if elapsed < self._rate_limit_seconds:
-            await asyncio.sleep(self._rate_limit_seconds - elapsed)
-        self._last_request_time = time.time()
+        await self._request_gate.wait_for_slot(self._rate_limit_seconds)
 
     async def _fetch_json(self, params: dict[str, str], headers: dict[str, str]) -> dict[str, Any]:
         """Führt den HTTP-GET mit Tenacity-Retry aus.
@@ -169,10 +234,15 @@ class NVDClient:
         """
 
         async def _request() -> dict[str, Any]:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.get(self._base_url, params=params, headers=headers)
-                response.raise_for_status()
-                return response.json()
+            await self._request_gate.acquire()
+            try:
+                await self._rate_limit()
+                async with httpx.AsyncClient(timeout=self._timeout) as client:
+                    response = await client.get(self._base_url, params=params, headers=headers)
+                    response.raise_for_status()
+                    return response.json()
+            finally:
+                self._request_gate.release()
 
         return await self._retry_ctx(_request)
 
@@ -193,8 +263,6 @@ class NVDClient:
                 return None
             logger.debug("Cache-Hit für %s", cve_id)
             return cached  # type: ignore[return-value]
-
-        await self._rate_limit()
 
         headers: dict[str, str] = {"apiKey": self.api_key} if self.api_key else {}
 
@@ -230,9 +298,24 @@ class NVDClient:
         """
         if not cve_ids:
             return []
+        if len(cve_ids) > self._max_cves_per_batch:
+            raise ValueError("NVD-Batch überschreitet die maximale Anzahl von CVE-Kennungen")
 
-        tasks = [self.get_cve_data(cve_id) for cve_id in cve_ids]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results: list[dict[str, Any] | None | BaseException] = [None] * len(cve_ids)
+        next_index = 0
+
+        async def worker() -> None:
+            nonlocal next_index
+            while next_index < len(cve_ids):
+                index = next_index
+                next_index += 1
+                try:
+                    results[index] = await self.get_cve_data(cve_ids[index])
+                except Exception as exc:  # defensive: preserve remaining work and result order
+                    results[index] = exc
+
+        worker_count = min(self._max_concurrent_requests, len(cve_ids))
+        await asyncio.gather(*(worker() for _ in range(worker_count)))
 
         filtered: list[dict[str, Any]] = []
         for idx, result in enumerate(results):

@@ -4,7 +4,7 @@ Validiert die Kommunikation mit der N-Central API unter Verwendung von Mocks,
 einschließlich Mandantensuche und Überprüfung des Patch-Status (KB-Nummern).
 """
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -58,6 +58,123 @@ class TestNCentralClientIntegration:
         assert customer is not None, "Customer sollte nicht None sein"
         assert customer["customerId"] == 123
         assert customer["customerName"] == "Test Customer"
+
+    @pytest.mark.asyncio
+    async def test_find_customer_escapes_apostrophe_and_requires_exact_match(self):
+        client = NCentralClient()
+        client.base_url = "https://mock-ncentral.example.com"
+        client.api_key = "test-key"
+        client._get_json = AsyncMock(
+            return_value={
+                "items": [
+                    {"customerId": 1, "customerName": "Other Customer"},
+                    {"customerId": 2, "customerName": "O'Brien GmbH"},
+                ]
+            }
+        )
+
+        customer = await client.find_customer_by_name("O'Brien GmbH")
+
+        assert customer == {"customerId": 2, "customerName": "O'Brien GmbH"}
+        client._get_json.assert_awaited_once_with(
+            "https://mock-ncentral.example.com/api/customers",
+            params={"pageNumber": 1, "pageSize": 1000},
+        )
+
+    @pytest.mark.asyncio
+    async def test_find_customer_rejects_injection_shaped_mismatched_results(self):
+        tenant_name = "Acme' or customerName ne '"
+        client = NCentralClient()
+        client.base_url = "https://mock-ncentral.example.com"
+        client.api_key = "test-key"
+        client._get_json = AsyncMock(
+            return_value={"items": [{"customerId": 1, "customerName": "Victim"}]}
+        )
+
+        customer = await client.find_customer_by_name(tenant_name)
+
+        assert customer is None
+        client._get_json.assert_awaited_once_with(
+            "https://mock-ncentral.example.com/api/customers",
+            params={"pageNumber": 1, "pageSize": 1000},
+        )
+
+    @pytest.mark.asyncio
+    async def test_find_customer_rejects_ambiguous_exact_matches(self):
+        client = NCentralClient()
+        client.base_url = "https://mock-ncentral.example.com"
+        client.api_key = "test-key"
+        client._get_json = AsyncMock(
+            return_value={
+                "items": [
+                    {"customerId": 1, "customerName": "Duplicate"},
+                    {"customerId": 2, "customerName": "Duplicate"},
+                ]
+            }
+        )
+
+        assert await client.find_customer_by_name("Duplicate") is None
+
+    @pytest.mark.asyncio
+    async def test_find_customer_rejects_duplicate_on_later_page(self):
+        client = NCentralClient()
+        client.base_url = "https://mock-ncentral.example.com"
+        client.api_key = "test-key"
+        client._get_json = AsyncMock(
+            side_effect=[
+                {
+                    "items": [{"customerId": 1, "customerName": "Duplicate"}],
+                    "totalPages": 2,
+                },
+                {
+                    "items": [{"customerId": 2, "customerName": "Duplicate"}],
+                    "totalPages": 2,
+                },
+            ]
+        )
+
+        assert await client.find_customer_by_name("Duplicate") is None
+        assert client._get_json.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_find_customer_finds_exact_match_on_later_page(self):
+        client = NCentralClient()
+        client.base_url = "https://mock-ncentral.example.com"
+        client.api_key = "test-key"
+        client._get_json = AsyncMock(
+            side_effect=[
+                {
+                    "items": [{"customerId": 1, "customerName": "Other"}],
+                    "totalPages": 2,
+                },
+                {
+                    "items": [{"customerId": 2, "customerName": "Expected"}],
+                    "totalPages": 2,
+                },
+            ]
+        )
+
+        assert await client.find_customer_by_name("Expected") == {
+            "customerId": 2,
+            "customerName": "Expected",
+        }
+
+    @pytest.mark.asyncio
+    async def test_find_customer_rejects_inconsistent_pagination_metadata(self):
+        client = NCentralClient()
+        client.base_url = "https://mock-ncentral.example.com"
+        client.api_key = "test-key"
+        client._get_json = AsyncMock(
+            side_effect=[
+                {"items": [], "totalPages": 3},
+                {
+                    "items": [{"customerId": 2, "customerName": "Expected"}],
+                    "totalPages": 2,
+                },
+            ]
+        )
+
+        assert await client.find_customer_by_name("Expected") is None
 
     @pytest.mark.asyncio
     async def test_is_kb_installed_normalizes_kb_numbers(self):

@@ -164,6 +164,13 @@ Bearer-Credential auf dem Transportweg schützen.
 - `MAX_FINDINGS_PER_TICKET_OPERATION` begrenzt die aus der Datenbank geladene Menge vor
   Enrichment oder Dispatch (Standard: 500). Überschreitungen liefern
   `422 operation_item_limit_exceeded`, bevor externe Systeme aufgerufen werden.
+- `MAX_CVES_PER_FINDING` und `MAX_CVES_PER_TICKET_OPERATION` begrenzen die Zahl
+  erkannter CVE-Vorkommen pro Finding beziehungsweise eindeutiger Kennungen pro
+  Operation vor dem NVD-Enrichment (Standard: 20 beziehungsweise
+  500). `NVD_MAX_CONCURRENT_REQUESTS` begrenzt zusätzlich die gleichzeitig laufenden
+  NVD-Anfragen pro Prozess (Standard: 5); das Rate-Limit wird zwischen parallelen
+  Aufrufen synchronisiert. `NCENTRAL_MAX_CUSTOMER_PAGES` begrenzt die fail-closed
+  Suche nach einem exakt und eindeutig passenden N-Central-Kunden.
 - `MAX_BATCH_CANDIDATES_PER_OPERATION` verhindert, dass eine einzelne Batch-Anfrage
   rekursiv den gesamten Tenant-Bestand prüft (Standard: 50).
 - `MAX_CONCURRENT_MANAGEMENT_OPERATIONS` begrenzt teure Import-, Vorbereitungs- und

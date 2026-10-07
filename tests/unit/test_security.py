@@ -250,8 +250,14 @@ def test_settings_reject_duplicate_management_credentials(duplicate: str) -> Non
         ("MAX_IMPORT_BYTES", 0),
         ("MAX_FINDINGS_PER_IMPORT", 0),
         ("MAX_FINDINGS_PER_TICKET_OPERATION", 0),
+        ("MAX_CVES_PER_FINDING", 0),
+        ("MAX_CVES_PER_TICKET_OPERATION", 0),
         ("MAX_BATCH_CANDIDATES_PER_OPERATION", 0),
         ("MAX_CONCURRENT_MANAGEMENT_OPERATIONS", 0),
+        ("NVD_MAX_CONCURRENT_REQUESTS", 0),
+        ("NVD_RATE_LIMIT", 0),
+        ("NVD_RATE_LIMIT_WITH_KEY", 0),
+        ("NCENTRAL_MAX_CUSTOMER_PAGES", 0),
         ("SMTP_TIMEOUT_SECONDS", 0),
         ("COPILOT_TIMEOUT_SECONDS", 0),
         ("COPILOT_CONCURRENT_REQUESTS", 0),
@@ -269,3 +275,21 @@ def test_settings_reserve_request_space_for_multipart_overhead() -> None:
             MAX_REQUEST_BYTES=1024 + 64 * 1024 - 1,
             MAX_IMPORT_BYTES=1024,
         )
+
+
+def test_settings_require_operation_cve_limit_to_cover_one_finding() -> None:
+    with pytest.raises(ValueError, match="MAX_CVES_PER_TICKET_OPERATION"):
+        Settings(
+            _env_file=None,
+            MAX_CVES_PER_FINDING=21,
+            MAX_CVES_PER_TICKET_OPERATION=20,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("NVD_RATE_LIMIT", 6), ("NVD_RATE_LIMIT_WITH_KEY", 51)],
+)
+def test_settings_reject_nvd_rates_above_documented_quota(field: str, value: int) -> None:
+    with pytest.raises(ValueError):
+        Settings(_env_file=None, **{field: value})

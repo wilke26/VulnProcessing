@@ -4,10 +4,13 @@ Validiert die Kommunikation mit der National Vulnerability Database (NVD) REST A
 Überprüft das Abrufen von CVE-Daten, das Caching von Antworten und die Batch-Verarbeitung.
 """
 
+import asyncio
+import time
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+import app.connectors.nvd_client as nvd_module
 from app.connectors.nvd_client import NVDClient
 
 
@@ -41,7 +44,7 @@ class TestNVDClient:
             ]
         }
 
-        client = NVDClient()
+        client = NVDClient(requests_per_second=1000)
 
         # Mocking des httpx.AsyncClient-Kontexts
         with patch("httpx.AsyncClient") as MockAsyncClient:
@@ -85,7 +88,7 @@ class TestNVDClient:
         # Arrange: Leere Antwort von der API
         mock_response_data = {"vulnerabilities": []}
 
-        client = NVDClient()
+        client = NVDClient(requests_per_second=1000)
 
         with patch("httpx.AsyncClient") as MockAsyncClient:
             mock_response = Mock()
@@ -127,7 +130,7 @@ class TestNVDClient:
             "CVE-2024-9999": {"vulnerabilities": []},
         }
 
-        client = NVDClient()
+        client = NVDClient(requests_per_second=1000)
 
         with patch("httpx.AsyncClient") as MockAsyncClient:
             call_count = 0
@@ -168,6 +171,130 @@ class TestNVDClient:
         assert len(results) == 2, f"Expected 2 results, got {len(results)}: {results}"
         assert results[0]["cve"]["id"] == "CVE-2024-1234"
         assert results[1]["cve"]["id"] == "CVE-2024-5678"
+
+    @pytest.mark.asyncio
+    async def test_get_multiple_cves_rejects_oversized_batch_before_network(self):
+        client = NVDClient(max_cves_per_batch=2)
+
+        with pytest.raises(ValueError, match="maximale Anzahl"):
+            await client.get_multiple_cves(["CVE-2026-1001", "CVE-2026-1002", "CVE-2026-1003"])
+
+    @pytest.mark.asyncio
+    async def test_get_multiple_cves_bounds_concurrent_requests(self):
+        client = NVDClient(
+            requests_per_second=100_000,
+            max_concurrent_requests=2,
+            max_cves_per_batch=10,
+        )
+        active = 0
+        maximum_active = 0
+
+        async def fake_get(self, url, headers=None, params=None, timeout=None):
+            nonlocal active, maximum_active
+            active += 1
+            maximum_active = max(maximum_active, active)
+            await asyncio.sleep(0.01)
+            active -= 1
+            response = Mock()
+            response.raise_for_status = Mock()
+            response.json = Mock(
+                return_value={"vulnerabilities": [{"cve": {"id": params["cveId"]}}]}
+            )
+            return response
+
+        cve_ids = [f"CVE-2026-{index:04d}" for index in range(1000, 1006)]
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            results = await client.get_multiple_cves(cve_ids)
+
+        assert maximum_active == 2
+        assert [result["cve"]["id"] for result in results] == cve_ids
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_serializes_request_starts(self):
+        client = NVDClient(
+            requests_per_second=100,
+            max_concurrent_requests=3,
+            max_cves_per_batch=3,
+        )
+        starts: list[float] = []
+
+        async def fake_get(self, url, headers=None, params=None, timeout=None):
+            starts.append(time.monotonic())
+            response = Mock()
+            response.raise_for_status = Mock()
+            response.json = Mock(
+                return_value={"vulnerabilities": [{"cve": {"id": params["cveId"]}}]}
+            )
+            return response
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            await client.get_multiple_cves(["CVE-2026-1001", "CVE-2026-1002", "CVE-2026-1003"])
+
+        assert len(starts) == 3
+        assert all(
+            later - earlier >= 0.008 for earlier, later in zip(starts, starts[1:], strict=False)
+        )
+
+    @pytest.mark.asyncio
+    async def test_default_clients_share_process_concurrency_gate(self, monkeypatch):
+        monkeypatch.setattr(nvd_module, "_PROCESS_REQUEST_GATES", {})
+        settings_obj = nvd_module.Settings(_env_file=None, NVD_MAX_CONCURRENT_REQUESTS=1)
+        first = NVDClient(settings_obj=settings_obj)
+        second = NVDClient(settings_obj=settings_obj)
+        first._rate_limit_seconds = 0.0001
+        second._rate_limit_seconds = 0.0001
+        active = 0
+        maximum_active = 0
+
+        async def fake_get(self, url, headers=None, params=None, timeout=None):
+            nonlocal active, maximum_active
+            active += 1
+            maximum_active = max(maximum_active, active)
+            await asyncio.sleep(0.01)
+            active -= 1
+            response = Mock()
+            response.raise_for_status = Mock()
+            response.json = Mock(
+                return_value={"vulnerabilities": [{"cve": {"id": params["cveId"]}}]}
+            )
+            return response
+
+        with patch("httpx.AsyncClient.get", new=fake_get):
+            await asyncio.gather(
+                first.get_cve_data("CVE-2026-1001"),
+                second.get_cve_data("CVE-2026-1002"),
+            )
+
+        assert maximum_active == 1
+
+    @pytest.mark.asyncio
+    async def test_worker_pool_does_not_block_next_cve_behind_slow_peer(self, monkeypatch):
+        client = NVDClient(max_concurrent_requests=2, max_cves_per_batch=3)
+        slow_finished = False
+        third_started_before_slow_finished = False
+
+        async def fake_get_cve_data(cve_id):
+            nonlocal slow_finished, third_started_before_slow_finished
+            if cve_id == "CVE-2026-1001":
+                await asyncio.sleep(0.03)
+                slow_finished = True
+            elif cve_id == "CVE-2026-1002":
+                await asyncio.sleep(0.001)
+            else:
+                third_started_before_slow_finished = not slow_finished
+            return {"cve": {"id": cve_id}}
+
+        monkeypatch.setattr(client, "get_cve_data", fake_get_cve_data)
+        results = await client.get_multiple_cves(
+            ["CVE-2026-1001", "CVE-2026-1002", "CVE-2026-1003"]
+        )
+
+        assert third_started_before_slow_finished
+        assert [result["cve"]["id"] for result in results] == [
+            "CVE-2026-1001",
+            "CVE-2026-1002",
+            "CVE-2026-1003",
+        ]
 
     @pytest.mark.asyncio
     async def test_caches_responses(self):

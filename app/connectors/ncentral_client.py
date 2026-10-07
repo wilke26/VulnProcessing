@@ -33,6 +33,7 @@ class NCentralClient:
     """
 
     def __init__(self, settings_obj: Settings = settings) -> None:
+        self.settings = settings_obj
         self.base_url = settings_obj.NCENTRAL_API_URL.rstrip("/")
         self.api_key = settings_obj.NCENTRAL_API_KEY
         self.timeout = settings_obj.NCENTRAL_TIMEOUT
@@ -93,22 +94,50 @@ class NCentralClient:
             return None
 
         try:
-            data = await self._get_json(
-                f"{self.base_url}/api/customers",
-                params={"filter": f"customerName eq '{tenant_name}'"},
-            )
-            customers = data.get("items", [])
+            exact_matches: list[dict[str, Any]] = []
+            page_number = 1
+            expected_total_pages: int | None = None
+            while True:
+                data = await self._get_json(
+                    f"{self.base_url}/api/customers",
+                    params={"pageNumber": page_number, "pageSize": 1000},
+                )
+                customers = data.get("items", [])
+                total_pages = data.get("totalPages", 1)
+                if (
+                    not isinstance(customers, list)
+                    or not isinstance(total_pages, int)
+                    or isinstance(total_pages, bool)
+                    or total_pages < 0
+                    or (total_pages == 0 and bool(customers))
+                    or total_pages > self.settings.NCENTRAL_MAX_CUSTOMER_PAGES
+                    or (expected_total_pages is not None and total_pages != expected_total_pages)
+                ):
+                    logger.warning("Ungültige oder zu große Kundenliste von N-Central erhalten")
+                    return None
 
-            if not customers:
+                expected_total_pages = total_pages
+
+                exact_matches.extend(
+                    customer
+                    for customer in customers
+                    if isinstance(customer, dict) and customer.get("customerName") == tenant_name
+                )
+                if len(exact_matches) > 1:
+                    logger.warning(
+                        f"Mehrere exakte Kunden mit Namen '{tenant_name}' gefunden, "
+                        "breche Suche ab"
+                    )
+                    return None
+                if page_number >= expected_total_pages:
+                    break
+                page_number += 1
+
+            if not exact_matches:
                 logger.info(f"Kunde '{tenant_name}' nicht in N-Central gefunden")
                 return None
 
-            if len(customers) > 1:
-                logger.warning(
-                    f"Mehrere Kunden mit Namen '{tenant_name}' gefunden, verwende ersten Treffer"
-                )
-
-            customer = customers[0]
+            customer = exact_matches[0]
             logger.info(
                 f"Kunde gefunden: {customer.get('customerName')} (ID: {customer.get('customerId')})"
             )
