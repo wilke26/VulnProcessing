@@ -39,19 +39,16 @@ def create_schema(conn: sqlite3.Connection) -> None:
     cursor.execute("PRAGMA foreign_keys=ON")
 
     # Tabelle für Mandanten (Tenants)
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS tenant (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
             created_at DATETIME DEFAULT (datetime('now'))
         )
-        """
-    )
+        """)
 
     # Tabelle für Assets (Geräte/Hosts)
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS asset (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tenant_id INTEGER NOT NULL,
@@ -62,23 +59,19 @@ def create_schema(conn: sqlite3.Connection) -> None:
             FOREIGN KEY(tenant_id) REFERENCES tenant(id) ON DELETE CASCADE,
             UNIQUE (tenant_id, name)
         )
-        """
-    )
+        """)
 
     # Tabelle für Produkte
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS product (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
             created_at DATETIME DEFAULT (datetime('now'))
         )
-        """
-    )
+        """)
 
     # Tabelle für CVE-Stammdaten
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS cve (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             cve_id TEXT NOT NULL UNIQUE,
@@ -86,12 +79,10 @@ def create_schema(conn: sqlite3.Connection) -> None:
             severity TEXT,
             created_at DATETIME DEFAULT (datetime('now'))
         )
-        """
-    )
+        """)
 
     # Tabelle zur Überwachung von Importvorgängen
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS import_run (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tenant_id INTEGER NOT NULL,
@@ -105,12 +96,10 @@ def create_schema(conn: sqlite3.Connection) -> None:
             completed_at DATETIME,
             FOREIGN KEY(tenant_id) REFERENCES tenant(id) ON DELETE CASCADE
         )
-        """
-    )
+        """)
 
     # Tabelle für die Batch-Verarbeitung von Tickets
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS ticket_batch (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tenant_id INTEGER NOT NULL,
@@ -130,12 +119,10 @@ def create_schema(conn: sqlite3.Connection) -> None:
             FOREIGN KEY(tenant_id) REFERENCES tenant(id) ON DELETE CASCADE,
             UNIQUE (tenant_id, batch_number)
         )
-        """
-    )
+        """)
 
     # Haupttabelle für Findings (Sicherheitsergebnisse)
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS finding (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tenant_id INTEGER NOT NULL,
@@ -168,12 +155,10 @@ def create_schema(conn: sqlite3.Connection) -> None:
             CHECK (risk >= 0.0 AND risk <= 10.0),
             CHECK (amount >= 1)
         )
-        """
-    )
+        """)
 
     # Zuordnung Finding <-> Produkt (Many-to-Many)
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS finding_product (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             finding_id INTEGER NOT NULL,
@@ -183,12 +168,10 @@ def create_schema(conn: sqlite3.Connection) -> None:
             FOREIGN KEY(product_id) REFERENCES product(id) ON DELETE CASCADE,
             UNIQUE (finding_id, product_id)
         )
-        """
-    )
+        """)
 
     # Zuordnung Finding <-> CVE (Many-to-Many)
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS finding_cve (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             finding_id INTEGER NOT NULL,
@@ -198,12 +181,10 @@ def create_schema(conn: sqlite3.Connection) -> None:
             FOREIGN KEY(cve_id) REFERENCES cve(id) ON DELETE CASCADE,
             UNIQUE (finding_id, cve_id)
         )
-        """
-    )
+        """)
 
     # Tabelle für Einzel-Tickets
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS ticket (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             finding_id INTEGER NOT NULL,
@@ -214,12 +195,10 @@ def create_schema(conn: sqlite3.Connection) -> None:
             updated_at DATETIME DEFAULT (datetime('now')),
             FOREIGN KEY(finding_id) REFERENCES finding(id) ON DELETE CASCADE
         )
-        """
-    )
+        """)
 
     # Tabelle für das Audit-Log (Änderungshistorie)
-    cursor.execute(
-        """
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tenant_id INTEGER NOT NULL,
@@ -231,8 +210,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
             created_at DATETIME DEFAULT (datetime('now')),
             FOREIGN KEY(tenant_id) REFERENCES tenant(id) ON DELETE CASCADE
         )
-        """
-    )
+        """)
 
     conn.commit()
 
