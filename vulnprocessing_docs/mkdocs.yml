@@ -1,7 +1,6 @@
 site_name: VulnProcessing Entwicklerdokumentation
-site_description: Dokumentation des VulnProcessing‑Projekts (IT‑Ausbildungsprojekt)
+site_description: Entwicklerdokumentation der kuratierten VulnProcessing-Referenz
 site_author: Udo Wilke
-site_language: de
 nav:
   - Startseite: index.md
   - Datenmodell: data-models.md

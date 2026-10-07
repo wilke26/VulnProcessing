@@ -6,11 +6,8 @@ RUFF    := $(POETRY) run ruff
 BLACK   := $(POETRY) run black
 PYTEST  := $(POETRY) run pytest
 
-DC_FILE := deploy/docker/docker-compose.dev.yml
-
 # ---- Phony Targets ----
-.PHONY: help install export-schema validate format lint test run-api run-worker build \
-        compose-up compose-down clean ci
+.PHONY: help install export-schema validate format lint test test-fast run-api docs build clean ci
 
 help:
 	@echo "Targets:"
@@ -22,12 +19,10 @@ help:
 	@echo "  test            - pytest"
 	@echo "  test-fast       - pytest ohne property-tests"
 	@echo "  run-api         - FastAPI (Uvicorn) mit --reload"
-	@echo "  run-worker      - Celery-Worker"
+	@echo "  docs            - MkDocs-Dokumentation strikt bauen"
 	@echo "  build           - Build (inkl. Schema-Export)"
-	@echo "  compose-up      - Dev-Stack (API, Worker, Redis)"
-	@echo "  compose-down    - Dev-Stack stoppen & entfernen"
 	@echo "  clean           - Build-/Cache-Dateien entfernen"
-	@echo "  ci              - Lint + Tests + Schema-Export"
+	@echo "  ci              - Lint + Tests + Schema- und Doku-Build"
 
 # ---- Basics ----
 install:
@@ -44,10 +39,10 @@ validate:
 # ---- Qualität ----
 format:
 	$(BLACK) .
-	$(RUFF) --fix .
+	$(RUFF) check --fix .
 
 lint:
-	$(RUFF) .
+	$(RUFF) check .
 
 test:
 	$(PYTEST) -q
@@ -59,19 +54,12 @@ test-fast:
 run-api:
 	$(UVICORN) app.main:app --host 127.0.0.1 --port 8000 --reload
 
-run-worker:
-	$(POETRY) run celery -A app.tasks.celery_app.celery worker --loglevel=INFO
-
 # ---- Build/Release ----
+docs:
+	$(POETRY) run mkdocs build --strict -f vulnprocessing_docs/mkdocs.yml -d ../build/docs
+
 build: export-schema
 	$(POETRY) build
-
-# ---- Docker Dev Stack ----
-compose-up:
-	docker compose -f $(DC_FILE) up --build
-
-compose-down:
-	docker compose -f $(DC_FILE) down -v
 
 # ---- Aufräumen ----
 clean:
@@ -79,5 +67,5 @@ clean:
 	@rm -rf .pytest_cache dist build 2>/dev/null || true
 
 # ---- CI-ähnlicher Shortcut ----
-ci: lint test export-schema
+ci: lint test export-schema docs build
 	@echo "CI-Checks ok."

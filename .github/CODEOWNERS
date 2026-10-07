@@ -1,9 +1,6 @@
 # CODEOWNERS
-# Hinweis: Auf privaten Repos im GitHub Free/Pro-Plan wird CODEOWNERS-Review
-# in Branch-Protection-Regeln nicht technisch erzwungen (erfordert GitHub Pro
-# + öffentliches Repo, oder Team/Enterprise). Diese Datei dient als
-# Dokumentation der Verantwortlichkeiten und greift automatisch, sobald die
-# Voraussetzungen erfüllt sind.
+# Dokumentiert die Review-Verantwortung für das öffentliche Referenzprojekt.
+# Die tatsächliche Erzwingung hängt von den Repository-Regeln auf GitHub ab.
 
 # Standard-Owner für das gesamte Repository
 *       @wilke26

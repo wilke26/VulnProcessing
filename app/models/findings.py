@@ -127,4 +127,4 @@ class FindingsEnvelope(BaseModel):
 
 
 # Kombinierter Eingabetyp, der sowohl die Liste als auch das Envelope akzeptiert.
-UnifiedFindingsInput = UnifiedFindingsInput = FindingsEnvelope | FindingsInput
+UnifiedFindingsInput = FindingsEnvelope | FindingsInput
