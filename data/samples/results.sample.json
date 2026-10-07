@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "source": "synthetic-portfolio-sample",
+  "generated_at": "2026-01-15T10:00:00Z",
+  "items": [
+    {
+      "name": "Example web server package requires CVE-2025-12345 remediation",
+      "cve_id": "CVE-2025-12345",
+      "tenant": "Example Tenant",
+      "risk": 8.2,
+      "amount": 1,
+      "target": "web-01.example.invalid",
+      "extendedSolution": [
+        "Install the vendor-provided security update."
+      ],
+      "windowsVersionHint": "",
+      "products": [
+        "Example Web Server"
+      ]
+    },
+    {
+      "name": "Example workstation configuration should be hardened",
+      "tenant": "Example Tenant",
+      "risk": 4.5,
+      "amount": 2,
+      "target": "client-01.example.invalid, client-02.example.invalid",
+      "extendedSolution": [
+        "Apply the documented secure configuration baseline."
+      ],
+      "windowsVersionHint": "",
+      "products": [
+        "Example Operating System"
+      ]
+    }
+  ]
+}

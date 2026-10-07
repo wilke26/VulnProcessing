@@ -1,7 +1,17 @@
 # VulnProcessing
 
+[![CI](https://github.com/wilke26/VulnProcessing/actions/workflows/ci.yml/badge.svg)](https://github.com/wilke26/VulnProcessing/actions/workflows/ci.yml)
+
 VulnProcessing ist eine Pipeline zur automatisierten Verarbeitung von Findings aus der Lywand-Plattform.  
 Eingehende JSON-Daten werden über einen **Data Contract** formal definiert, validiert und im Anschluss zur Ticket-Erstellung verwendet.
+
+## Projektstatus
+
+Das Repository ist eine kuratierte Bewerbungsreferenz und wird nicht produktiv
+betrieben. Es zeigt den implementierten Stand einschließlich Sicherheitsgrenzen,
+Tests und rekonstruierter Architekturentscheidungen. Historische Azure-Zielbilder sind
+als solche gekennzeichnet; eine produktionsfertige Deploymentkonfiguration gehört
+nicht zum unterstützten Umfang.
 
 ## English summary
 
@@ -22,17 +32,21 @@ Bezeichner und Commit-Nachrichten verwenden überwiegend Englisch.
 - Validierung von Eingabedateien (raw und Envelope)
 - FastAPI Service inkl. `/health` und `/version`
 - lokal ausführbarer FastAPI-Service; kein aktueller Produktivbetrieb
-- vorbereitete, derzeit unvollständige Docker-Compose-Konfiguration
 - Ticket-Dispatching via Composition Root und konfigurierbare Clients
+- zentrale Management-Authentifizierung mit Tenant- und Operations-Scopes
+- signierte, dispatchgebundene Batch-Bestätigung
 
 ## Repository-Struktur (Kurzform)
 
-app/ → Anwendungscode (FastAPI, Models, Services)
-schema/ → generierte JSON-Schemas (nicht manuell ändern)
-scripts/ → export_schema.py, validate_file.py
-deploy/ → Deployment (z. B. Azure, Docker)
-tests/ → Unit/Integration-Tests
-docs/ → Projektdokumentation
+```text
+app/                 Anwendungscode (FastAPI, Modelle, Services, Connectoren)
+data/samples/        synthetische Beispieldaten
+docs/                Architektur, historische Dokumente und ADRs
+schema/              lokal bzw. in CI generierte JSON-Schemas
+scripts/             CLI-, Migrations- und Referenzwerkzeuge
+tests/               Unit-, Integrations- und End-to-End-Tests
+vulnprocessing_docs/ MkDocs-Entwicklerdokumentation
+```
 
 ## Architektur und Entscheidungen
 
@@ -187,14 +201,24 @@ dokumentiert.
 ## Voraussetzungen
 
 - Python >= 3.12
-- Poetry >= 1.8
-- optional: Docker für lokale Entwicklung
+- Poetry 2.2.x
 
-## Setup
+## Lokaler Schnellstart
 
 ```bash
 poetry install
 poetry run python scripts/export_schema.py
+poetry run uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Danach liefern `http://127.0.0.1:8000/health` und
+`http://127.0.0.1:8000/version` den öffentlichen Dienststatus. Management-Routen
+bleiben ohne konfigurierte `MANAGEMENT_CREDENTIALS` absichtlich deaktiviert.
+
+Der mitgelieferte synthetische Datensatz lässt sich ohne externe Dienste prüfen:
+
+```bash
+poetry run python scripts/validate_file.py data/samples/results.sample.json
 ```
 
 Beim Start des FastAPI-Service wird das lokale SQLite-Schema bei Bedarf unter

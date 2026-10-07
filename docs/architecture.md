@@ -131,20 +131,17 @@ Der implementierte Einstiegspunkt ist `app.main:app`. Beim Start werden die
 SQLAlchemy-Tabellen initialisiert, optional ein konfigurierter Dateiimport ausgeführt
 und ein monatlicher Scheduler gestartet.
 
-Das Repository enthält Hinweise auf Azure App Service und Docker Compose, aber keine
-vollständig belegte oder aktuell betriebene Produktivbereitstellung. Fehlende
-Dockerfiles, leere Azure-Platzhalter und nicht implementierte Worker-Pfade sind keine
-unterstützten Deploymentvarianten. Für die Bewerbungsreferenz gilt daher die in
+Das historische Azure-Zielbild bleibt in `docs/04_Betrieb_Azure.md` nachvollziehbar;
+ausführbare Azure-, Docker- oder Workerartefakte gehören jedoch nicht zum kuratierten
+Snapshot. Es gibt keine belegte oder aktuell betriebene Produktivbereitstellung. Für
+die Bewerbungsreferenz gilt daher die in
 [ADR-0007](adr/0007-curated-portfolio-reference.md) festgehaltene Grenze.
 
 ## Bekannte Architekturarbeit
 
-- atomarer und idempotenter Claim vor externen Dispatch-Nebenwirkungen;
 - Antwortgrößen- und Item-Limits für externe Adapter sowie Fleet-weite Admission Control;
 - verifizierte Transportverschlüsselung für die übrigen credentialtragenden Adapter;
-- Bereinigung der parallelen alten und neuen Persistenz-/Intake-Pfade;
-- Entscheidung über eine unterstützte Deploymentform oder Entfernung unvollständiger
-  Deploymentartefakte.
+- Bereinigung der parallelen alten und neuen Persistenz-/Intake-Pfade.
 
 ## Entscheidungsnachweise
 

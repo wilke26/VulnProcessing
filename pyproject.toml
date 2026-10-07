@@ -31,12 +31,8 @@ confirm-batch = "scripts.confirm_batch_webhook:main"
 
 [tool.poetry]
 packages = [{ include = "app" },
-            { include = "config" },
-            { include = "data" },
-            { include = "deploy" },
             { include = "schema" },
-            {include = "scripts"},
-            { include = "tests" }
+            { include = "scripts" }
             ]
 
 [tool.poetry.group.dev.dependencies]

@@ -6,6 +6,13 @@ __pycache__/
 .ruff_cache/
 .coverage
 .hypothesis/
+/build/
+/dist/
+/vulnprocessing_docs/site/
+
+# Lokal und in CI aus dem Pydantic-Contract erzeugt
+/schema/lywand_findings_raw_v1.schema.json
+/schema/lywand_findings_envelope_v1.schema.json
 
 # Reports / generierte Artefakte (lokal, nicht versionieren)
 ruff_*.txt

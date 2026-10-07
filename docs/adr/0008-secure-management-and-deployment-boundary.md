@@ -13,8 +13,9 @@ inzwischen durch fail-closed Bearer-Credentials mit Operations- und Tenant-Scope
 umgesetzt. STARTTLS-Verbindungen des SMTP-Adapters prüfen inzwischen Zertifikatskette
 und Hostnamen. Eingehende Request-Bodies, teure Management-Operationen,
 Ticket-Kandidatenmengen, Batch-Scans und bekannte Adapterlaufzeiten sind inzwischen
-begrenzt. Weitere offene Grenzen betreffen insbesondere Antwortgrößen externer Adapter,
-Fleet-weite Admission Control, Dispatch-Idempotenz und öffentliche Fehlerdetails.
+begrenzt. Atomare Dispatch-Claims, explizite Dispatch-Ergebnisse und stabile öffentliche
+Fehlerantworten sind ebenfalls umgesetzt. Weitere offene Grenzen betreffen insbesondere
+Antwortgrößen externer Adapter, Zielsystemfreigaben und Fleet-weite Admission Control.
 
 Der Quellcode darf als Referenz öffentlich sein. Daraus folgt jedoch keine Freigabe, den
 Service unverändert einem nicht vertrauenswürdigen Netzwerk auszusetzen.
@@ -57,6 +58,12 @@ Eigenschaften nachweisbar erfüllt:
   Prozess; Datenbankkandidaten und Batch-Scans besitzen feste Obergrenzen.
 - SMTP, Copilot, N-Central und NVD besitzen validierte endliche Einzelaufruf-Timeouts;
   die REST-Ticketclients verwenden weiterhin ihren expliziten Timeout.
+- Ein atomarer Claim schützt den externen Batch-Dispatch vor konkurrierender
+  Doppelausführung; vollständige Fehler und Teilerfolge besitzen getrennte Zustände.
+- Öffentliche API-Fehler verwenden stabile Codes, ohne interne Exceptions oder lokale
+  Pfade offenzulegen.
+- NVD-Anfragen und N-Central-Kundensuchen besitzen zusätzliche Mengen-, Parallelitäts-
+  und Paginierungsgrenzen.
 - Lokale Standardstarter binden den veröffentlichten Port an Loopback.
 - Die übrigen Anforderungen dieses ADRs bleiben offen; der Gesamtstatus ist deshalb
   weiterhin `Proposed`.
@@ -71,6 +78,7 @@ Eigenschaften nachweisbar erfüllt:
 - `app/core/resource_limits.py` implementiert Streaming-Body-Limit und prozesslokale
   Admission Control; die Ticket- und Batch-Services begrenzen materialisierte
   Kandidaten vor externer Verarbeitung.
-- `app/services/batch_ticketing_service.py` führt externe Nebenwirkungen vor einem
-  atomaren Dispatch-Claim aus.
-- `app/api/routes_tickets.py` gibt an mehreren Stellen interne Fehlerdetails zurück.
+- `app/services/batch_ticketing_service.py` beansprucht einen Batch atomar vor externen
+  Nebenwirkungen und bildet Dispatch-Ergebnisse explizit auf Zustände ab.
+- `app/api/errors.py` und die API-Routen trennen öffentliche Fehlercodes von internen
+  Ausnahmen.

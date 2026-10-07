@@ -1,33 +1,47 @@
 # Security Policy
 
-## Reporting a Vulnerability
+## Supported versions
 
-Please report security vulnerabilities using GitHub's private
-vulnerability reporting: open the **Security and quality** tab of this
-repository, select **Advisories** under **Reporting**, and choose
-**Report a vulnerability**. This creates a private advisory visible
-only to the maintainer and avoids public disclosure before a fix is
-available.
+VulnProcessing is maintained as a portfolio reference rather than a production
+service. Security fixes are applied to the latest public release and the current
+`main` branch.
 
-Please do not open a public issue for security-sensitive reports.
+| Version | Supported |
+|---|---|
+| `0.2.x` / `main` | Yes |
+| `< 0.2` | No |
+
+## Reporting a vulnerability
+
+Please use GitHub's private vulnerability reporting for security-sensitive reports:
+
+1. Open the repository's **Security** tab.
+2. Select **Advisories** and **Report a vulnerability**.
+3. Include the affected revision, reproduction steps, impact and any suggested
+   mitigation.
+
+Do not disclose exploit details in a public issue before a fix is available. Ordinary
+correctness bugs that do not cross a security boundary can be reported as public
+issues.
 
 ## Scope
 
-This project is a demonstration and portfolio pipeline. The local
-Docker Compose environment is explicitly a development setup, not a
-production deployment (see README). Several production-hardening
-gaps are already known and intentionally documented as future work
-in the README (for example, authenticated `AUDIT_ACTOR` derivation)
-— you do not need to report those specifically.
+Useful reports include vulnerabilities in:
 
-Genuine vulnerabilities in the implementation are very welcome,
-including but not limited to:
+- management authentication, operation scopes or tenant isolation;
+- import validation, request limits and resource-consumption boundaries;
+- webhook authentication, replay protection and dispatch state transitions;
+- handling of credentials and transport security in external connectors;
+- public error responses, local data exposure or the public-snapshot checks;
+- CI workflow permissions and dependency or build integrity.
 
-- MQTT/database input handling
-- ML artifact signature verification and deserialization
-- The operator audit trail and key-rotation logic
-- The release build, signing, and verification chain
+The repository is not deployed as a public service. Historical Azure plans and other
+limitations explicitly documented in `docs/architecture.md` are not vulnerabilities by
+themselves. A report is still welcome when the implementation contradicts those stated
+boundaries or creates an exploitable path in a supported local setup.
 
-## Supported Versions
+## Response expectations
 
-Only the latest released version receives security fixes.
+This project has no bug-bounty program or production-response SLA. Reports will be
+acknowledged and assessed on a best-effort basis. Please allow time for a coordinated
+fix before publishing details.

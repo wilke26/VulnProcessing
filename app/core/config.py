@@ -143,18 +143,6 @@ class Settings(BaseSettings):
     MAX_BATCH_CANDIDATES_PER_OPERATION: int = Field(default=50, gt=0, le=500)
     MAX_CONCURRENT_MANAGEMENT_OPERATIONS: int = Field(default=4, gt=0, le=100)
 
-    # --- Pfade ---
-    DATA_DIR: str = "./data"
-    TEMPLATES_DIR: str = "./app/templates"
-
-    # --- Celery ---
-    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
-
-    # --- Monitoring ---
-    ENABLE_METRICS: bool = False
-    METRICS_PORT: int = 9090
-
     # --- Feature-Flags ---
     # Aktiviert oder deaktiviert die Filterung von Windows-Patches über N-Central
     ENABLE_WINDOWS_PATCH_FILTER: bool = False
