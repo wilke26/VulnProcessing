@@ -18,9 +18,8 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
-          setup_commands:
-            - import sys
-            - sys.path.append('..')
+          paths:
+            - ..
           options:
             separate_signature: true
             show_signature_annotations: true
