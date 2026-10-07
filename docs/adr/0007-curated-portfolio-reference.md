@@ -19,6 +19,11 @@ bereitgestellt. Das private Ursprungsrepository bleibt Evidenzarchiv. Der öffen
 Snapshot enthält keine produktiven Daten, Secrets oder ungeprüfte Historie und behauptet
 weder aktuellen Produktivbetrieb noch eine vollständige Cloud-Bereitstellung.
 
+Die Veröffentlichung dient ausschließlich der Einsicht und Bewertung als
+Bewerbungsreferenz. Sie erfolgt bewusst ohne Open-Source-Lizenz; sämtliche Rechte am
+Code und an der Dokumentation bleiben vorbehalten. Die durch die GitHub-Nutzungsbedingungen
+für GitHub-Funktionen gewährten Rechte bleiben davon unberührt.
+
 Die Architekturhistorie wird aus erhaltenem Code, Tests, Commits und Reviews
 rekonstruiert. Rekonstruierte Entscheidungen werden ausdrücklich gekennzeichnet; Lücken
 werden nicht durch erfundene Begründungen geschlossen.
@@ -29,11 +34,14 @@ werden nicht durch erfundene Begründungen geschlossen.
   sein.
 - README und Architektur nennen Projektstatus und Grenzen deutlich.
 - Beispieldaten müssen eindeutig synthetisch sein.
-- Ein öffentlicher Snapshot benötigt eigene CI, Lizenz und Releaseprüfung.
+- Ein öffentlicher Snapshot benötigt eigene CI, einen ausdrücklichen Rechtehinweis und
+  eine Releaseprüfung.
 - Neue Arbeiten können weiterhin über nachvollziehbare PRs und ADRs erfolgen.
 
 ## Evidenz
 
 - Entscheidung des Repository-Eigentümers vom 6. Oktober 2026.
+- Entscheidung des Repository-Eigentümers vom 7. Oktober 2026, keine
+  Open-Source-Nutzungsrechte einzuräumen.
 - Sicherheitsprüfung des privaten Repositories vor der geplanten Veröffentlichung.
 - Der erhaltene `origin/main`-Commit-Graph dient als private Rekonstruktionsquelle.

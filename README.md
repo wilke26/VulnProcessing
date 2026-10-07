@@ -231,3 +231,12 @@ getrackten Dateien auf SQLite-Inhalte, `.env`-Dateien einschließlich lokaler un
 umgebungsspezifischer Varianten, JWT-ähnliche Credentials und
 private Schlüssel. Ignorierte lokale Dateien werden dabei nicht in den Snapshot
 übernommen.
+
+## Lizenz und Nutzungsrechte
+
+Copyright (c) 2026 Udo Wilke. Alle Rechte vorbehalten.
+
+Dieses Repository ist als öffentlich einsehbare Bewerbungsreferenz gedacht und wird
+nicht unter einer Open-Source-Lizenz bereitgestellt. Über die für GitHub-Funktionen
+geltenden Rechte hinaus werden keine allgemeinen Nutzungs-, Änderungs- oder
+Weitergaberechte eingeräumt. Einzelheiten stehen in der Datei [LICENSE](LICENSE).
