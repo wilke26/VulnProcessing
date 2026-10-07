@@ -101,15 +101,17 @@ class Settings(BaseSettings):
     NCENTRAL_API_KEY: str = ""
     # Timeout für API-Anfragen an N-Central in Sekunden
     NCENTRAL_TIMEOUT: int = Field(default=30, gt=0, le=300)
+    NCENTRAL_MAX_CUSTOMER_PAGES: int = Field(default=20, gt=0, le=100)
 
     # --- Nist NVD ---
     # API-Schlüssel für die NVD-API
     NVD_API_KEY: str | None = None
     NVD_BASE_URL: str = "https://services.nvd.nist.gov/rest/json/cves/2.0"
-    NVD_RATE_LIMIT: int = 5
-    NVD_RATE_LIMIT_WITH_KEY: int = 50
+    NVD_RATE_LIMIT: int = Field(default=5, gt=0, le=5)
+    NVD_RATE_LIMIT_WITH_KEY: int = Field(default=50, gt=0, le=50)
     NVD_TIMEOUT: int = Field(default=30, gt=0, le=300)
     NVD_CACHE_TTL: int = 86400
+    NVD_MAX_CONCURRENT_REQUESTS: int = Field(default=5, gt=0, le=50)
 
     # --- SMTP / E-Mail Konfiguration ---
     SMTP_HOST: str = "localhost"
@@ -136,6 +138,8 @@ class Settings(BaseSettings):
     MAX_IMPORT_BYTES: int = Field(default=10 * 1024 * 1024, gt=0)
     MAX_FINDINGS_PER_IMPORT: int = Field(default=10_000, gt=0)
     MAX_FINDINGS_PER_TICKET_OPERATION: int = Field(default=500, gt=0, le=10_000)
+    MAX_CVES_PER_FINDING: int = Field(default=20, gt=0, le=100)
+    MAX_CVES_PER_TICKET_OPERATION: int = Field(default=500, gt=0, le=10_000)
     MAX_BATCH_CANDIDATES_PER_OPERATION: int = Field(default=50, gt=0, le=500)
     MAX_CONCURRENT_MANAGEMENT_OPERATIONS: int = Field(default=4, gt=0, le=100)
 
@@ -249,6 +253,11 @@ class Settings(BaseSettings):
             raise ValueError(
                 "MAX_REQUEST_BYTES muss mindestens 64 KiB größer als MAX_IMPORT_BYTES "
                 "sein, damit Multipart-Metadaten zusätzlich zur Importdatei Platz haben."
+            )
+
+        if self.MAX_CVES_PER_TICKET_OPERATION < self.MAX_CVES_PER_FINDING:
+            raise ValueError(
+                "MAX_CVES_PER_TICKET_OPERATION darf nicht kleiner als " "MAX_CVES_PER_FINDING sein."
             )
 
         subjects: set[str] = set()

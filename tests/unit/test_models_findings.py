@@ -14,6 +14,7 @@ from app.models.findings import (
     FindingsEnvelope,
     UnifiedFindingsInput,
 )
+from app.models.findings import settings as finding_settings
 
 
 def test_finding_valid_instance():
@@ -50,6 +51,56 @@ def test_finding_rejects_empty_name():
     with pytest.raises(ValidationError):
         Finding(
             name="",  # Ungültig
+            tenant="Tenant A",
+            risk=5.0,
+            amount=1,
+            target="server01.local",
+            extendedSolution=["Fix"],
+            windowsVersionHint="",
+            products=["Produkt X"],
+        )
+
+
+def test_finding_rejects_too_many_unique_cves(monkeypatch):
+    monkeypatch.setattr(finding_settings, "MAX_CVES_PER_FINDING", 2)
+
+    with pytest.raises(ValidationError, match="maximale Anzahl erkannter CVE"):
+        Finding(
+            name="CVE-2026-1001 CVE-2026-1002 CVE-2026-1003",
+            tenant="Tenant A",
+            risk=5.0,
+            amount=1,
+            target="server01.local",
+            extendedSolution=["Fix"],
+            windowsVersionHint="",
+            products=["Produkt X"],
+        )
+
+
+def test_finding_cve_limit_counts_dedicated_id_and_deduplicates_name(monkeypatch):
+    monkeypatch.setattr(finding_settings, "MAX_CVES_PER_FINDING", 4)
+
+    finding = Finding(
+        name="CVE-2026-1001 cve-2026-1001 CVE-2026-1002",
+        cve_id="CVE-2026-1001",
+        tenant="Tenant A",
+        risk=5.0,
+        amount=1,
+        target="server01.local",
+        extendedSolution=["Fix"],
+        windowsVersionHint="",
+        products=["Produkt X"],
+    )
+
+    assert finding.cve_id == "CVE-2026-1001"
+
+
+def test_finding_cve_limit_counts_repeated_occurrences(monkeypatch):
+    monkeypatch.setattr(finding_settings, "MAX_CVES_PER_FINDING", 2)
+
+    with pytest.raises(ValidationError, match="maximale Anzahl erkannter CVE"):
+        Finding(
+            name="CVE-2026-1001 CVE-2026-1001 CVE-2026-1001",
             tenant="Tenant A",
             risk=5.0,
             amount=1,

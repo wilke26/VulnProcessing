@@ -146,7 +146,7 @@ class TicketPreparationService:
 def build_ticket_preparation_service(settings_obj: Settings = settings) -> TicketPreparationService:
     """Composition Root fuer TicketPreparationService."""
     prioritizer = PrioritizationService(PriorityConfig())
-    enricher = EnrichmentService()
+    enricher = EnrichmentService(settings_obj=settings_obj)
     deduplicator = DeduplicationService()
 
     steps: list[TicketPreparationStep] = []

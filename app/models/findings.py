@@ -6,16 +6,40 @@ Es unterstützt sowohl einfache Listen von Findings als auch ein strukturiertes 
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.core.config import settings
 
 # Typ-Aliase mit Validierungsregeln
 NonEmptyStr = Annotated[str, Field(min_length=1)]
 RiskFloat = Annotated[float, Field(ge=0.0, le=10.0)]
 AmountInt = Annotated[int, Field(ge=1)]
 NonEmptyStrList = Annotated[list[NonEmptyStr], Field(min_length=1)]
+CVE_ID_PATTERN = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", flags=re.IGNORECASE)
+
+
+def extract_finding_cve_ids(name: str, cve_id: str | None) -> tuple[list[str], list[str]]:
+    """Return normalized CVE IDs and duplicates in deterministic input order."""
+
+    ids: list[str] = []
+    duplicates: list[str] = []
+
+    def add(candidate: str) -> None:
+        normalized = candidate.upper()
+        if normalized in ids:
+            duplicates.append(normalized)
+        else:
+            ids.append(normalized)
+
+    if cve_id:
+        add(cve_id)
+    for token in CVE_ID_PATTERN.findall(name):
+        add(token)
+    return ids, duplicates
 
 
 class Finding(BaseModel):
@@ -75,6 +99,13 @@ class Finding(BaseModel):
         if not v:
             return ["Unknown"]  # Fallback
         return v
+
+    @model_validator(mode="after")
+    def validate_cve_count(self) -> Finding:
+        cve_ids, duplicates = extract_finding_cve_ids(self.name, self.cve_id)
+        if len(cve_ids) + len(duplicates) > settings.MAX_CVES_PER_FINDING:
+            raise ValueError("Finding überschreitet die maximale Anzahl erkannter CVE-Kennungen")
+        return self
 
 
 # Definition für ein einfaches Array von Findings (Legacy-Unterstützung)

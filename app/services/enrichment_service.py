@@ -11,11 +11,11 @@ Der Service übernimmt:
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Sequence
 from typing import Any, Literal
 
 from app.connectors.nvd_client import NVDClient
+from app.core.config import Settings, settings
 from app.core.logging import get_logger
 from app.models.enrichment import (
     CVSSVector,
@@ -23,10 +23,14 @@ from app.models.enrichment import (
     EnrichmentStatus,
     NVDEnrichment,
 )
-from app.models.findings import Finding
+from app.models.findings import Finding, extract_finding_cve_ids
 
 # Logger initialisieren
 logger = get_logger(__name__)
+
+
+class CVEQueryLimitExceeded(ValueError):
+    """Raised before NVD work when a finding or operation exceeds its CVE budget."""
 
 
 class EnrichmentService:
@@ -37,17 +41,20 @@ class EnrichmentService:
     und diese in einem einheitlichen Format (EnrichedFinding) bereitzustellen.
     """
 
-    # Regulärer Ausdruck zur Erkennung von CVE-Kennungen im Text
-    _cve_pattern = re.compile(r"CVE-\d{4}-\d{4,7}", flags=re.IGNORECASE)
-
-    def __init__(self, nvd_client: NVDClient | None = None):
+    def __init__(
+        self,
+        nvd_client: NVDClient | None = None,
+        settings_obj: Settings = settings,
+    ) -> None:
         """
         Initialisiert den EnrichmentService.
 
         Args:
             nvd_client (NVDClient, optional): Client für den Zugriff auf die NVD-API.
+            settings_obj: Validierte Grenzwerte für Finding und Ticket-Operation.
         """
-        self.nvd_client = nvd_client or NVDClient()
+        self.settings = settings_obj
+        self.nvd_client = nvd_client or NVDClient(settings_obj=settings_obj)
 
     async def enrich_findings(self, findings: Sequence[Finding]) -> list[EnrichedFinding]:
         """
@@ -71,6 +78,10 @@ class EnrichmentService:
         # Schritt 1: CVE-IDs extrahieren und eindeutige Liste erstellen
         extraction = [self._extract_cve_ids(f) for f in findings]
         unique_cves = sorted({cve for ids, _ in extraction for cve in ids})
+        if len(unique_cves) > self.settings.MAX_CVES_PER_TICKET_OPERATION:
+            raise CVEQueryLimitExceeded(
+                "Ticket-Operation überschreitet die maximale Anzahl eindeutiger CVE-Kennungen"
+            )
 
         # Schritt 2: Daten von NVD abrufen
         cve_payloads = await self._load_cves(unique_cves)
@@ -192,24 +203,11 @@ class EnrichmentService:
         Extrahiert CVE-IDs aus dem dedizierten Feld 'cve_id' sowie aus dem Namen des Findings.
         Gibt ein Tupel aus (eindeutige IDs, gefundene Duplikate) zurück.
         """
-        ids: list[str] = []
-        duplicates: list[str] = []
-
-        def _add(candidate: str) -> None:
-            normalized = candidate.upper()
-            if normalized in ids:
-                duplicates.append(normalized)
-            else:
-                ids.append(normalized)
-
-        # 1. Direktes Feld prüfen
-        if finding.cve_id:
-            _add(finding.cve_id)
-
-        # 2. Name des Findings per Regex scannen
-        for token in self._cve_pattern.findall(finding.name):
-            _add(token)
-
+        ids, duplicates = extract_finding_cve_ids(finding.name, finding.cve_id)
+        if len(ids) + len(duplicates) > self.settings.MAX_CVES_PER_FINDING:
+            raise CVEQueryLimitExceeded(
+                "Finding überschreitet die maximale Anzahl erkannter CVE-Kennungen"
+            )
         return ids, duplicates
 
     def _extract_references(self, payload: dict[str, Any]) -> list[str]:
