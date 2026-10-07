@@ -29,7 +29,10 @@ def default_management_principal():
 
 @pytest.fixture(scope="session")
 def db_engine():
-    engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+    engine = create_engine(
+        TEST_DATABASE_URL,
+        connect_args={"check_same_thread": False, "autocommit": False},
+    )
     # Importiere alle Modelle, damit Base.metadata davon erfährt
     from app.db import models  # noqa: F401
 
@@ -43,7 +46,7 @@ def db_session(db_engine, monkeypatch):
     connection = db_engine.connect()
     transaction = connection.begin()
 
-    SessionLocal = sessionmaker(bind=connection)
+    SessionLocal = sessionmaker(bind=connection, join_transaction_mode="create_savepoint")
     session = SessionLocal()
 
     # Monkeypatch the engine and SessionLocal in app.db.engine
